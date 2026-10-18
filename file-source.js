@@ -160,4 +160,7 @@
       set onend(fn) { onend = fn; }
     };
   };
+
+  /* decks already on the page with a src, upgraded before this file loaded */
+  document.querySelectorAll('vinyl-player[src]').forEach((el) => { void el.source; });
 })();

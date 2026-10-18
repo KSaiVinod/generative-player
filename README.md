@@ -26,7 +26,9 @@ It has no dependencies and needs no build step. It is plain scripts and one styl
 | `engine/` | `VinylPlayer.Generative`: a new track made in the browser every time, plus Tone.js, sampled instruments and a melody model (about 20 MB) | optional |
 | `demo/` | A page with all three. Serve the folder and open `demo/`. | no |
 
-Every script finds its own files next to itself, so the folder can be served from any path.
+Every script finds its own files next to itself, so the folder can be served from any path. To use it in another app, copy the folder into that app. Loading the files from another site needs that site to send CORS headers for all of them: the worklet, the instruments and the melody model.
+
+`VinylPlayer.Generative` is a single engine, so only one deck on a page can play it. Any number of decks can play files.
 
 ## A deck that plays a file
 
@@ -124,6 +126,7 @@ All events bubble.
 | `vp-hint` | what the deck would say | the text (`''` while it is playing) |
 | `vp-scratch` | a scratch turns direction at speed | `{ flips }`, counted from when the hand went down |
 | `vp-like` | the LIKE key took | — |
+| `vp-error` | the source could not start (a missing file, CORS, a file that will not decode) | `{ error }` |
 
 ## Writing your own source
 

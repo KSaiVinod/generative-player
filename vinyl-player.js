@@ -29,7 +29,8 @@
 
    Events (bubbling): vp-play, vp-stop, vp-end, vp-change (detail: the
    source's track), vp-hint (detail: text), vp-scratch (detail: { flips },
-   each time a scratch turns direction at speed), vp-like.
+   each time a scratch turns direction at speed), vp-like, vp-error
+   (detail: { error }: the source could not start).
    ============================================================ */
 (() => {
   'use strict';
@@ -214,7 +215,11 @@
     }
 
     /* ── the source: what plays ─────────────────────────────────────── */
-    get source() { return this._source; }
+    /* a src given before file-source.js had loaded: its source made when wanted */
+    get source() {
+      if (!this._source && this._built && this.getAttribute('src') && VP.FileSource) this.source = VP.FileSource(this.getAttribute('src'));
+      return this._source;
+    }
     set source(src) {
       if (this._source && this._source !== src && this._playing) this.stop();
       this._source = src || null;
@@ -386,7 +391,7 @@
        groove). play(from, how): the same, with how() starting the sound in
        place of the source's start (a B-side, a flip). */
     async play(from, how) {
-      const src = this._source;
+      const src = this.source;
       if (!src || this._busy || (this._playing && !how)) return;
       this._busy = true;
       try {
@@ -406,7 +411,16 @@
           if (A) { try { A.needleDrop(); } catch (e) { /* none */ } }
           this._followIn(600);
         } else {
-          await src.start(landing, from || 0);
+          try { await src.start(landing, from || 0); }
+          catch (e) {
+            /* nothing to play (a missing file, a refused one, one that will
+               not decode): the needle goes back to its rest */
+            this._setPlaying(false);
+            this._parts.arm.classList.remove('is-tracking');
+            this._armTo(0, true);
+            this._emit('vp-error', { error: e });
+            return;
+          }
           this._followIn(landing * 1000 + 200);
           if (A) { try { await A.unlock(); await A.start(); setTimeout(() => A.needleDrop(), landing * 1000 - 100); } catch (e) { /* none */ } }
         }
