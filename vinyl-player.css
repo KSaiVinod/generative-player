@@ -37,7 +37,11 @@ vinyl-player{
   -webkit-tap-highlight-color:transparent;
 }
 vinyl-player *,vinyl-player *::before,vinyl-player *::after{box-sizing:border-box;}
-vinyl-player:not(:defined){display:block;min-height:200px;}
+/* Until vinyl-player.js has built the deck, what the page put inside it
+   (a label's artwork) is raw markup with no size: an <svg> would fill the
+   screen for a moment. Nothing shows until the deck is there. */
+vinyl-player:not(:defined){display:block;min-height:200px;visibility:hidden;}
+vinyl-player > [slot="label"]{display:none;}
 
 /* ── the body ─────────────────────────────────────────────────────── */
 .vp-plinth{position:relative;display:grid;
