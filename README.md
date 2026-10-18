@@ -57,6 +57,7 @@ A file from another origin needs CORS headers.
 <script src="/vinyl-player/engine/no-blob-workers.js"></script>   <!-- only under a CSP without blob: workers -->
 <script src="/vinyl-player/engine/vendor/tone/Tone.js"></script>
 <script src="/vinyl-player/engine/vendor/tonejs-instruments/manifest.js"></script>
+<script src="/vinyl-player/engine/vendor/vcsl/manifest.js"></script>
 <script src="/vinyl-player/engine/generative.js" data-likes-key="my-app.likes"></script>
 <script src="/vinyl-player/vinyl-player.js"></script>
 
@@ -177,6 +178,8 @@ The engine plays sampled instruments from [tonejs-instruments](https://github.co
 - Karoryfer Samples;
 - the University of Iowa Electronic Music Studios;
 - Freesound contributors flcellogrl, quartertone and donyaquick.
+
+More keyboards, mallets, bells, plucked strings, reeds, whistles, hand percussion and an acoustic drum kit come from the [Versilian Community Sample Library](https://github.com/sgossner/VCSL) (Versilian Studios, CC0: no credit required, given anyway). `scripts/pack-vcsl.js` packs them into `engine/vendor/vcsl/`; the manifest is optional, and without it the engine plays its synth voices in their place.
 
 Other parts:
 

@@ -228,29 +228,40 @@ window.VinylPlayer.Generative = (() => {
      (lo-fi): the sound and the playing, not the number of parts; groove: the
      rest. resp: what may answer the hook at the end of its phrases. */
   const EXTRAS = {
-    house:   { family: 'funk', perc: ['conga', 'cowbell', 'bongo'], counter: ['piano', 'guitar', 'organ'], resp: ['brass-hit', 'vox-chop', 'guitar-lick'],
-               ride: 0.6, bassInst: ['bass-electric'], realBass: 0.5, horns: 0.3, lead2: ['organ', 'pluck', 'saxophone', 'trumpet'] },
-    deep:    { family: 'groove', perc: ['snap', 'conga', 'bongo'], counter: ['wurli', 'saxophone', 'vox'], resp: ['vox-chop', 'sax-lick'],
-               ride: 0.3, bassInst: ['bass-electric'], realBass: 0.3, harmonium: 0.15, ninths: 0.55, lead2: ['keys', 'saxophone', 'flute'] },
-    prog:    { family: 'evolve', perc: ['conga', 'clave'], counter: ['piano', 'harp', 'choir'], resp: [],
-               ride: 0.7, strings: 0.7, revPiano: 0.6, lead2: ['bell', 'supersaw', 'violin'] },
-    melodic: { family: 'evolve', perc: ['bongo', 'conga', 'woodblock'], counter: ['marimba', 'kalimba', 'piano'], resp: [],
-               ride: 0.4, strings: 0.8, revPiano: 0.3, lead2: ['guitar-nylon', 'bell', 'flute', 'violin'] },
-    uplift:  { family: 'evolve', perc: ['clave'], counter: ['piano', 'choir', 'violin'], resp: [],
-               ride: 0.9, strings: 0.9, horns: 0.4, revPiano: 0.5, lead2: ['pluck', 'bell', 'violin'] },
-    trance:  { family: 'evolve', perc: ['clave', 'woodblock'], counter: ['piano', 'choir', 'harp'], resp: [],
-               ride: 0.8, strings: 0.7, horns: 0.3, revPiano: 0.35, lead2: ['sawlead', 'supersaw', 'violin'] },
-    lofi:    { family: 'texture', perc: ['snap', 'woodblock'], counter: ['vibes', 'guitar-nylon', 'muted-trumpet'], resp: ['sax-lick'],
-               ride: 0.7, brush: true, bassInst: ['contrabass', 'bass-electric'], realBass: 0.85, wood: 0.4, ninths: 0.6, lead2: ['keys', 'saxophone', 'flute'] },
-    disco:   { family: 'funk', perc: ['conga', 'cowbell', 'bongo'], counter: ['wah-guitar', 'clav', 'guitar-electric'], resp: ['string-stab', 'brass-hit', 'guitar-lick'],
-               ride: 0.7, bassInst: ['bass-electric'], realBass: 0.85, strings: 0.75, horns: 0.6, lead2: ['organ', 'keys', 'trumpet', 'saxophone'] },
-    acid:    { family: 'groove', perc: ['cowbell', 'clave'], counter: ['organ', 'vox', 'clav'], resp: ['vox-chop'], ride: 0.5, lead2: ['acid'] },
-    chicago: { family: 'funk', perc: ['conga', 'cowbell', 'clave'], counter: ['piano', 'organ', 'vox'], resp: ['brass-hit', 'vox-chop', 'guitar-lick'],
-               ride: 0.5, bassInst: ['bass-electric'], realBass: 0.6, ninths: 0.3, lead2: ['organ', 'keys', 'saxophone'] },
-    minimal: { family: 'minimal', perc: ['conga', 'woodblock', 'clave'], counter: ['marimba', 'wurli', 'vox'], resp: [], ride: 0.25, lead2: ['bell'] },
-    tech:    { family: 'groove', perc: ['bongo', 'conga', 'woodblock'], counter: ['vox', 'guitar', 'clav'], resp: ['vox-chop', 'guitar-lick', 'brass-hit'],
-               ride: 0.6, bassInst: ['bass-electric'], realBass: 0.4, lead2: ['pluck', 'acid', 'trumpet'] },
-    bside:   { family: 'texture', perc: ['bongo', 'snap'], counter: ['piano', 'guitar-acoustic', 'cello'], resp: [], ride: 0, bassInst: ['contrabass'], realBass: 0.9, wood: 0.8, harmonium: 0.6, strings: 0.4, lead2: ['bell', 'flute', 'clarinet'] }
+    house:   { family: 'funk', perc: ['conga', 'cowbell', 'bongo', 'agogo', 'claps'], counter: ['piano', 'guitar', 'organ', 'grand-piano', 'upright-piano', 'vibraphone', 'clavisynth'], resp: ['brass-hit', 'vox-chop', 'guitar-lick'],
+               ride: 0.6, bassInst: ['bass-electric'], realBass: 0.5, horns: 0.3, lead2: ['organ', 'pluck', 'saxophone', 'trumpet', 'tenor-sax', 'harmonica'],
+               shake: ['shaker', 'tamb'], shakes: 0.5, acoustic: 0.2 },
+    deep:    { family: 'groove', perc: ['snap', 'conga', 'bongo', 'cajon', 'triangle', 'finger'], counter: ['wurli', 'saxophone', 'vox', 'vibes', 'fm-piano', 'upright-piano', 'tenor-sax'], resp: ['vox-chop', 'sax-lick'],
+               ride: 0.3, bassInst: ['bass-electric'], realBass: 0.3, harmonium: 0.15, ninths: 0.55, lead2: ['keys', 'saxophone', 'flute', 'saxello', 'vibraphone'],
+               shake: ['shaker', 'cabasa'], shakes: 0.45, acoustic: 0.35 },
+    prog:    { family: 'evolve', perc: ['conga', 'clave', 'frame', 'darbuka', 'triangle'], counter: ['piano', 'harp', 'choir', 'concert-harp', 'grand-piano', 'hand-chimes', 'dan-tranh'], resp: [],
+               ride: 0.7, strings: 0.7, revPiano: 0.6, lead2: ['bell', 'supersaw', 'violin', 'glockenspiel', 'wine-glass'],
+               shake: ['shaker'], shakes: 0.3 },
+    melodic: { family: 'evolve', perc: ['bongo', 'conga', 'woodblock', 'darbuka', 'slit', 'frame', 'cajon'], counter: ['marimba', 'kalimba', 'piano', 'balafon', 'mbira', 'dan-tranh', 'folk-harp', 'vibraphone', 'psaltery'], resp: [],
+               ride: 0.4, strings: 0.8, revPiano: 0.3, lead2: ['guitar-nylon', 'bell', 'flute', 'violin', 'ocarina', 'recorder', 'kalimba', 'hand-chimes'],
+               shake: ['shaker', 'cabasa'], shakes: 0.45, acoustic: 0.15 },
+    uplift:  { family: 'evolve', perc: ['clave'], counter: ['piano', 'choir', 'violin', 'concert-harp', 'grand-piano', 'tubular-bells'], resp: [],
+               ride: 0.9, strings: 0.9, horns: 0.4, revPiano: 0.5, lead2: ['pluck', 'bell', 'violin', 'glockenspiel'] },
+    trance:  { family: 'evolve', perc: ['clave', 'woodblock'], counter: ['piano', 'choir', 'harp', 'concert-harp', 'grand-piano', 'glockenspiel'], resp: [],
+               ride: 0.8, strings: 0.7, horns: 0.3, revPiano: 0.35, lead2: ['sawlead', 'supersaw', 'violin', 'tubular-bells'],
+               shake: ['shaker'], shakes: 0.2 },
+    lofi:    { family: 'texture', perc: ['snap', 'woodblock', 'finger', 'frame'], counter: ['vibes', 'guitar-nylon', 'muted-trumpet', 'upright-piano', 'vibraphone', 'folk-harp'], resp: ['sax-lick'],
+               ride: 0.7, brush: true, bassInst: ['contrabass', 'bass-electric'], realBass: 0.85, wood: 0.4, ninths: 0.6, lead2: ['keys', 'saxophone', 'flute', 'harmonica', 'tenor-sax'],
+               shake: ['shaker'], shakes: 0.4, acoustic: 0.6 },
+    disco:   { family: 'funk', perc: ['conga', 'cowbell', 'bongo', 'agogo', 'claps', 'guiro'], counter: ['wah-guitar', 'clav', 'guitar-electric', 'clavisynth', 'upright-piano'], resp: ['string-stab', 'brass-hit', 'guitar-lick'],
+               ride: 0.7, bassInst: ['bass-electric'], realBass: 0.85, strings: 0.75, horns: 0.6, lead2: ['organ', 'keys', 'trumpet', 'saxophone', 'tenor-sax', 'glockenspiel'],
+               shake: ['tamb', 'shaker'], shakes: 0.7, acoustic: 0.5 },
+    acid:    { family: 'groove', perc: ['cowbell', 'clave', 'claps', 'slit'], counter: ['organ', 'vox', 'clav', 'clavisynth', 'fm-piano'], resp: ['vox-chop'], ride: 0.5, lead2: ['acid'] },
+    chicago: { family: 'funk', perc: ['conga', 'cowbell', 'clave', 'agogo', 'claps', 'triangle'], counter: ['piano', 'organ', 'vox', 'grand-piano', 'upright-piano', 'chapel-organ'], resp: ['brass-hit', 'vox-chop', 'guitar-lick'],
+               ride: 0.5, bassInst: ['bass-electric'], realBass: 0.6, ninths: 0.3, lead2: ['organ', 'keys', 'saxophone', 'tenor-sax', 'harmonica'],
+               shake: ['tamb', 'shaker'], shakes: 0.5, acoustic: 0.3 },
+    minimal: { family: 'minimal', perc: ['conga', 'woodblock', 'clave', 'slit', 'finger', 'frame'], counter: ['marimba', 'wurli', 'vox', 'balafon', 'mbira', 'kalimba', 'xylophone-real', 'hand-chimes'], resp: [], ride: 0.25, lead2: ['bell', 'glockenspiel', 'wine-glass'],
+               shake: ['shaker'], shakes: 0.35 },
+    tech:    { family: 'groove', perc: ['bongo', 'conga', 'woodblock', 'darbuka', 'cajon', 'agogo', 'slit'], counter: ['vox', 'guitar', 'clav', 'marimba', 'clavisynth', 'balafon'], resp: ['vox-chop', 'guitar-lick', 'brass-hit'],
+               ride: 0.6, bassInst: ['bass-electric'], realBass: 0.4, lead2: ['pluck', 'acid', 'trumpet', 'tenor-sax'],
+               shake: ['shaker', 'cabasa'], shakes: 0.4 },
+    bside:   { family: 'texture', perc: ['bongo', 'snap', 'finger', 'frame'], counter: ['piano', 'guitar-acoustic', 'cello', 'upright-piano', 'harpsichord', 'folk-harp', 'strumstick', 'psaltery'], resp: [], ride: 0, bassInst: ['contrabass'], realBass: 0.9, wood: 0.8, harmonium: 0.6, strings: 0.4, lead2: ['bell', 'flute', 'clarinet', 'recorder', 'ocarina', 'harmonica'],
+               shake: ['shaker', 'sleigh'], shakes: 0.4, acoustic: 0.8 }
   };
   const DANCE = { edm: true, trance: true, prog: true };
   /* the sampled instruments (tonejs-instruments): how each plays a counter
@@ -264,8 +275,50 @@ window.VinylPlayer.Generative = (() => {
     'french-horn': { fam: 'wind', oct: 1, vol: -12 }, bassoon: { fam: 'wind', oct: 0.5, vol: -11 },
     trumpet: { fam: 'stab', oct: 2, vol: -14 }, trombone: { fam: 'stab', oct: 0.5, vol: -13 },
     violin: { fam: 'bowed', oct: 2, vol: -13 }, cello: { fam: 'bowed', oct: 0.5, vol: -11 },
-    'bass-electric': { fam: 'bass', oct: 1, vol: -6 }, contrabass: { fam: 'bass', oct: 1, vol: -5 }, tuba: { fam: 'bass', oct: 1, vol: -10 }
-  };       // the forms that build and drop
+    'bass-electric': { fam: 'bass', oct: 1, vol: -6 }, contrabass: { fam: 'bass', oct: 1, vol: -5 }, tuba: { fam: 'bass', oct: 1, vol: -10 },
+    /* the Versilian Community Sample Library (VCSL, CC0; vendor/vcsl): the
+       keyboards, the mallets and bells, the plucked strings of three
+       continents, the reeds and the whistles. 'ring' is left to sound (chord
+       tones on the beat), 'figure' a small repeating figure of its own */
+    'grand-piano': { fam: 'keys', oct: 1, vol: -11 }, 'upright-piano': { fam: 'keys', oct: 1, vol: -10 },
+    harpsichord: { fam: 'pluck', oct: 1, vol: -13 }, 'pipe-organ': { fam: 'keys', oct: 1, vol: -17, hold: true },
+    'chapel-organ': { fam: 'keys', oct: 1, vol: -16, hold: true }, 'fm-piano': { fam: 'keys', oct: 1, vol: -12 },
+    clavisynth: { fam: 'chop', oct: 1, vol: -13 },
+    marimba: { fam: 'pluck', oct: 2, vol: -9 }, 'xylophone-real': { fam: 'pluck', oct: 2, vol: -14 }, balafon: { fam: 'pluck', oct: 2, vol: -11 },
+    vibes: { fam: 'ring', oct: 2, vol: -12, src: 'vibraphone' }, vibraphone: { fam: 'ring', oct: 2, vol: -12 },
+    glockenspiel: { fam: 'ring', oct: 4, vol: -18 }, 'tubular-bells': { fam: 'ring', oct: 1, vol: -17 },
+    'hand-chimes': { fam: 'ring', oct: 2, vol: -14 }, 'wine-glass': { fam: 'ring', oct: 2, vol: -16 },
+    kalimba: { fam: 'figure', oct: 2, vol: -10 }, mbira: { fam: 'figure', oct: 2, vol: -10 },
+    'concert-harp': { fam: 'pluck', oct: 2, vol: -10 }, 'folk-harp': { fam: 'pluck', oct: 2, vol: -10 },
+    'dan-tranh': { fam: 'figure', oct: 2, vol: -11 }, psaltery: { fam: 'pluck', oct: 2, vol: -12 },
+    strumstick: { fam: 'strum', oct: 1, vol: -10 },
+    'tenor-sax': { fam: 'wind', oct: 1, vol: -11 }, saxello: { fam: 'wind', oct: 1, vol: -12 },
+    harmonica: { fam: 'wind', oct: 1, vol: -14 }, recorder: { fam: 'wind', oct: 2, vol: -13 }, ocarina: { fam: 'wind', oct: 2, vol: -13 }
+  };
+  /* the VCSL's hand percussion and its acoustic kit: one-shots by name
+     (vendor/vcsl), each a few to choose between */
+  const PERC_REAL = {
+    conga: ['perc-conga', [[3, 'lo'], [6, 'hi'], [7, 'mute'], [10, 'lo'], [13, 'hi'], [14, 'slap']]],
+    bongo: ['perc-bongo', [[2, 'hi'], [3, 'himute'], [5, 'lo'], [7, 'hi'], [10, 'hi'], [11, 'himute'], [14, 'lo']]],
+    cowbell: ['perc-cowbell', [[2, 'open'], [6, 'muted'], [10, 'open'], [13, 'muted']]],
+    woodblock: ['perc-woodblock', [[4, 'a'], [7, 'b'], [11, 'a'], [14, 'soft']]],
+    agogo: ['perc-agogo', [[0, 'hi'], [3, 'hi'], [6, 'lo'], [8, 'hi'], [10, 'hi'], [12, 'lo']]],
+    cajon: ['perc-cajon', [[0, 'bass'], [3, 'tone'], [4, 'slap'], [7, 'tone'], [10, 'bass'], [12, 'slap'], [15, 'tone']]],
+    darbuka: ['perc-darbuka', [[0, 'doum'], [3, 'tek'], [4, 'ka'], [6, 'tek'], [8, 'doum'], [10, 'tek'], [12, 'ka'], [14, 'tek']]],
+    frame: ['perc-frame', [[0, 'lo'], [4, 'hi'], [6, 'mute'], [8, 'lo'], [10, 'mute'], [12, 'hi']]],
+    triangle: ['perc-triangle', [[2, 'muted'], [6, 'muted'], [8, 'open'], [10, 'muted'], [14, 'muted']]],
+    slit: ['perc-slit', [[0, 'lo'], [3, 'hi'], [6, 'hi'], [10, 'lo'], [12, 'hi']]],
+    claps: ['perc-claps', [[4, 'a'], [12, 'b'], [15, 'solo']]],
+    finger: ['perc-finger', [[4, 'hit'], [12, 'hit']]],
+    guiro: ['perc-guiro', [[0, 'fast'], [4, 'hit'], [8, 'fast'], [12, 'hit']]]
+  };
+  /* the shakers: a sixteenth line under the hand drums, a second layer */
+  const SHAKE_REAL = {
+    shaker: ['perc-shaker', ['down', 'up', 'down2', 'up2']], cabasa: ['perc-cabasa', ['hit', 'rub', 'hit', 'rub']],
+    tamb: ['perc-tamb', ['shake', 'soft', 'hit', 'soft']], sleigh: ['perc-sleigh', ['shake', 'hit', 'shake', 'hit']]
+  };
+  /* the pianos a track's piano part may be played on */
+  const PIANOS = ['piano', 'grand-piano', 'upright-piano'];       // the forms that build and drop
   /* the grooves: each player's place against the beat (seconds) and the
      sixteenths' accents; and the fills, [sixteenth, drum, level] */
   const GROOVES = {
@@ -582,16 +635,24 @@ window.VinylPlayer.Generative = (() => {
     const maxBeds = tr.family === 'minimal' || tr.family === 'texture' ? 1 : 2;
     while (beds.length > maxBeds) tr[beds.splice(Math.floor(r() * beds.length), 1)[0]] = false;
     if (tr.family === 'minimal') tr.fills = [2, 4];                  // small fills, carefully placed
+    /* which piano the piano parts are played on; a shaker's sixteenths under
+       the hand drums; a real drummer's kit (VCSL) for the styles played by hand */
+    tr.piano = pickIn(PIANOS);
+    if (tr.counter === 'piano') tr.counter = tr.piano;
+    tr.shake = r() < (X.shakes || 0) ? pickIn(X.shake) : null;
+    tr.acoustic = r() < (X.acoustic || 0);
     /* every sampled instrument this track will need loaded */
     const synthLead = { pluck: 1, supersaw: 1, bell: 1, acid: 1, organ: 1, keys: 1, sawlead: 1, squarelead: 1 };
     const RESP_SAMPLES = { 'brass-hit': ['trumpet', 'trombone'], 'string-stab': ['violin'], 'guitar-lick': ['guitar-electric'], 'sax-lick': ['saxophone'] };
     tr.samples = [...new Set([
-      ...(RESP_SAMPLES[tr.resp] || []), tr.revPiano || tr.rhythm === 'piano' ? 'piano' : null,
+      ...(RESP_SAMPLES[tr.resp] || []), tr.revPiano || tr.rhythm === 'piano' ? tr.piano : null,
       SAMPLED[tr.leadVoice] && !synthLead[tr.leadVoice] ? tr.leadVoice : null,
       SAMPLED[tr.counter] ? tr.counter : null, SAMPLED[tr.lead2] && !synthLead[tr.lead2] ? tr.lead2 : null, tr.realBass,
       tr.strings ? 'violin' : null, tr.strings ? 'cello' : null,
       tr.horns ? 'french-horn' : null, tr.horns ? 'trombone' : null, tr.horns ? 'tuba' : null,
-      tr.wood ? 'clarinet' : null, tr.wood ? 'bassoon' : null, tr.harmonium ? 'harmonium' : null
+      tr.wood ? 'clarinet' : null, tr.wood ? 'bassoon' : null, tr.harmonium ? 'harmonium' : null,
+      PERC_REAL[tr.percLayer] ? PERC_REAL[tr.percLayer][0] : null, SHAKE_REAL[tr.shake] ? SHAKE_REAL[tr.shake][0] : null,
+      tr.acoustic ? 'kit-acoustic' : null
     ].filter(Boolean).map((n) => (SAMPLED[n] && SAMPLED[n].src) || n))];      // (a wah guitar is the guitar's recordings)
     return tr;
   }
@@ -674,6 +735,7 @@ window.VinylPlayer.Generative = (() => {
      - a whole piano decoded would be well over a hundred megabytes. An
      instrument once decoded is kept for later tracks. */
   const SAMPLE_DIR = near('vendor/tonejs-instruments/');
+  const dirOf = (info) => (info.dir ? near('vendor/' + info.dir + '/') : SAMPLE_DIR);
   const decodedInst = new Map();
   let sampleWatch = null;                          // the page's preloader, told as notes arrive
   let pressWatch = null;                           // and as a record's bars are pressed
@@ -685,7 +747,7 @@ window.VinylPlayer.Generative = (() => {
     if (!info) return Promise.reject(new Error('no recordings of ' + name));
     const dec = new OfflineAudioContext(1, 1, SR);
     if (sampleWatch) sampleWatch(0, info.notes.length);
-    const p = fetch(SAMPLE_DIR + info.file)
+    const p = fetch(dirOf(info) + info.file)
       .then((r) => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
       .then((ab) => dec.decodeAudioData(ab))
       .then((buf) => {
@@ -698,7 +760,7 @@ window.VinylPlayer.Generative = (() => {
           const len = Math.max(1, Math.min(Math.round(info.len[i] * SR), src.length - s));
           const note = new AudioBuffer({ length: len, numberOfChannels: 1, sampleRate: SR });
           note.getChannelData(0).set(src.subarray(s, s + len));
-          out[n.replace('s', '#')] = note;
+          out[info.kind === 'hits' ? n : n.replace('s', '#')] = note;
         });
         if (sampleWatch) sampleWatch(info.notes.length, 0);
         return out;
@@ -718,11 +780,13 @@ window.VinylPlayer.Generative = (() => {
     if (!S) return;
     const want = new Set([].concat(S.leads, X.counter || [], X.lead2 || [], X.bassInst || [],
       X.strings ? ['violin', 'cello'] : [], X.horns ? ['french-horn', 'trombone', 'tuba'] : [],
-      X.wood ? ['clarinet', 'bassoon'] : [], X.harmonium ? ['harmonium'] : []));
+      X.wood ? ['clarinet', 'bassoon'] : [], X.harmonium ? ['harmonium'] : [],
+      (X.perc || []).map((p) => PERC_REAL[p] && PERC_REAL[p][0]).filter(Boolean)));
     want.forEach((n) => {
-      if (!SAMPLED[n] || !M[n] || fetched.has(n)) return;
+      n = (SAMPLED[n] && SAMPLED[n].src) || n;
+      if (!M[n] || fetched.has(n)) return;
       fetched.add(n);
-      fetch(SAMPLE_DIR + M[n].file, { priority: 'low' }).catch(() => fetched.delete(n));
+      fetch(dirOf(M[n]) + M[n].file, { priority: 'low' }).catch(() => fetched.delete(n));
     });
   }
   const samplesFor = (tr) => Promise.all((tr.samples || []).map((n) => instrument(n).then((m) => [n, m], () => [n, null])))
@@ -906,7 +970,27 @@ window.VinylPlayer.Generative = (() => {
       ctx = new T.OfflineContext(2, (skip + want + 128) / SR, SR);
       return Object.assign({ E, SM }, K);
     }))).then((K) => {
-    const E = K.E, SM = K.SM;
+    let E = K.E;
+    const SM = K.SM;
+    /* a drummer's kit (VCSL) in place of the machine's: each drum brought to
+       the level of the sound it stands in for, the middle tom the high one
+       tuned down; the kick still has the machine's under it, for the floor */
+    const AK = tr.acoustic ? SM['kit-acoustic'] : null;
+    if (AK) {
+      const peak = (b) => { let m = 0; for (let c = 0; c < b.numberOfChannels; c++) { const d = b.getChannelData(c); for (let i = 0; i < d.length; i++) m = Math.max(m, Math.abs(d[i])); } return m || 1; };
+      const like = (b, as, rate) => {
+        const k = peak(as) / peak(b), r = rate || 1, len = Math.floor(b.length / r), src = b.getChannelData(0);
+        const o = new AudioBuffer({ length: len, numberOfChannels: 1, sampleRate: b.sampleRate }), d = o.getChannelData(0);
+        for (let i = 0; i < len; i++) { const x = i * r, j = Math.floor(x), fr = x - j; d[i] = k * ((src[j] || 0) * (1 - fr) + (src[j + 1] || 0) * fr); }
+        return o;
+      };
+      K = Object.assign({}, K, {
+        hatC: like(AK.hatC, K.hatC), hatC2: like(AK.hatC2 || AK.hatC, K.hatC), hatO: like(AK.hatO, K.hatO), crash: like(AK.crash, K.crash),
+        snare: like(AK.snare, K.snare), snare2: like(AK.snare2 || AK.snare, K.snare), ghost: like(AK.ghost, K.ghost),
+        kickReal: AK.kick
+      });
+      E = Object.assign({}, E, { ride: like(AK.ride, E.ride), tomHi: like(AK.tomHi, E.tomHi), tomMid: like(AK.tomHi, E.tomMid, 0.84), tomLo: like(AK.tomLo, E.tomLo) });
+    }
     /* a real instrument, played: its recordings, re-pitched between them */
     const srcOf = (name) => (SAMPLED[name] && SAMPLED[name].src) || name;
     const sampler = (name, opts) => SM[srcOf(name)] ? new T.Sampler(Object.assign({ urls: SM[srcOf(name)], release: 0.8, volume: SAMPLED[name] ? SAMPLED[name].vol : -12 }, opts || {})) : null;
@@ -999,16 +1083,17 @@ window.VinylPlayer.Generative = (() => {
       const tomIn = { tomHi: lane(0.3), tomMid: lane(0), tomLo: lane(-0.3) };
       const shade = () => 0.985 + rnd() * 0.03;                        // a hair of pitch, never the same twice
       function kick(t, g) {
+        if (K.kickReal) { hit(K.kickReal, t, Math.min(1, 0.85 * g / 0.95), drums); kickSyn.triggerAttackRelease(kf1, kdec, t, Math.min(1, 0.45 * g / 0.95)); return; }
         kickSyn.triggerAttackRelease(kf1, kdec, t, Math.min(1, g / 0.95));
         if (KIT.click) hit(K.click, t, Math.min(1, g / 0.95), drums);
       }
-      const hat = (t, g) => hit(K.hatC, t, Math.min(1.2, g / 0.12), hatsIn, shade());
+      const hat = (t, g) => hit(K.hatC2 && rnd() < 0.4 ? K.hatC2 : K.hatC, t, Math.min(1.2, g / 0.12), hatsIn, shade());
       const openHat = (t, g) => hit(K.hatO, t, Math.min(1.2, g / 0.12), openIn, shade());
       const crash = (t) => hit(K.crash, t, 0.9, crashIn);
       function snare(t, g, ghost) {
         g *= 1.2;
         if (ghost) { hit(K.ghost, t, Math.min(1.2, g / 0.5), ghostIn, shade()); return; }
-        hit(K.snare, t, Math.min(1.2, g / 0.6), snareIn);
+        hit(K.snare2 && rnd() < 0.35 ? K.snare2 : K.snare, t, Math.min(1.2, g / 0.6), snareIn);
       }
       const perc = (t, g) => hit(K.perc, t, Math.min(1.2, g / 0.12), percIn, shade());
       /* the riser over a build: noise through a band that climbs (a few a side) */
@@ -1156,7 +1241,12 @@ window.VinylPlayer.Generative = (() => {
       let lead = lead1;                                  // which one plays, set per bar
 
       /* ---- the counter-melody: a second instrument with a part of its own ---- */
-      const cv = tr.counter;
+      /* (a recorded voice whose recordings did not load is played by the
+         synth nearest it: a bell by the vibes, a mallet by the marimba) */
+      const cv = SAMPLED[tr.counter] && !SM[srcOf(tr.counter)] && tr.counter !== 'piano'
+        ? ({ ring: 'vibes', figure: 'kalimba', pluck: 'marimba', keys: 'piano', chop: 'guitar', strum: 'guitar' }[SAMPLED[tr.counter].fam] || 'flute')
+        : tr.counter;
+      const realCv = SAMPLED[cv] && SM[srcOf(cv)];
       const formant = (f1, f2, f3) => {
         /* a voice's vowel: three resonances over a buzzing source */
         const inp = new T.Gain(1), sum = new T.Gain(1).connect(keys);
@@ -1172,7 +1262,7 @@ window.VinylPlayer.Generative = (() => {
           .connect(sync(new T.Tremolo({ frequency: 4.8, depth: 0.35 }).start(), 4.8).connect(keys));
       }
       const pat = { wurli: 'piano', clav: 'guitar' }[cv] || cv;   // the part each new voice plays
-      const counterSyn = !cv || SAMPLED[cv] ? null
+      const counterSyn = !cv || realCv ? null
         : cv === 'piano' ? pool(() => new T.FMSynth({ harmonicity: 3, modulationIndex: 8, oscillator: { type: 'sine' },
             envelope: { attack: 0.002, decay: 1.4, sustain: 0.08, release: 0.9 },
             modulationEnvelope: { attack: 0.002, decay: 0.35, sustain: 0, release: 0.4 }, volume: -15 }), 6).connect(keys)
@@ -1199,7 +1289,7 @@ window.VinylPlayer.Generative = (() => {
             .connect(sync(new T.Tremolo({ frequency: 5.5, depth: 0.4 }).start(), 5.5).connect(keys))
         : pool(() => new T.Synth({ oscillator: { type: 'sine' }, envelope: { attack: 0.07, decay: 0.2, sustain: 0.8, release: 0.25 }, volume: -16 }), 3)
             .connect(sync(new T.Vibrato({ frequency: 5.2, depth: 0.08, wet: 1 }), 5.2).connect(keys));     // a flute
-      const realCounter = SAMPLED[cv] ? sampler(cv, SAMPLED[cv].hold ? { attack: 0.05, release: 1.2 } : SAMPLED[cv].fam === 'bowed' ? { attack: 0.18, release: 1 } : {}) : null;
+      const realCounter = realCv ? sampler(cv, SAMPLED[cv].hold ? { attack: 0.05, release: 1.2 } : SAMPLED[cv].fam === 'ring' ? { release: 2.4 } : SAMPLED[cv].fam === 'bowed' ? { attack: 0.18, release: 1 } : {}) : null;
       if (realCounter) realCounter.chain(...fxOf(cv), keys);
       function realCounterAt(t, s16, ch, g, barIndex) {
         const R = SAMPLED[cv], k = R.oct, v = (x) => Math.min(1, x * g);
@@ -1218,6 +1308,12 @@ window.VinylPlayer.Generative = (() => {
         } else if (R.fam === 'stab') {
           const hits = tr.compVariant ? [2, 10, 14] : [0, 3, 6, 12];
           if (has(hits, s16)) realCounter.triggerAttackRelease(ch.notes.map((h) => h * k), STEP * 1.4, t, v(0.8));
+        } else if (R.fam === 'ring') {
+          /* bells and vibes: chord tones on the beat, left to ring */
+          if (s16 % 4 === 0) realCounter.triggerAttackRelease(tones[[0, 2, 1, 3][s16 / 4]], BEAT * 1.5, t, v(0.7));
+        } else if (R.fam === 'figure') {
+          /* a thumb piano's or a zither's little figure of its own over two beats, repeating */
+          if (has([0, 3, 6, 8, 11], s16)) { const n = line[[0, 3, 6, 8, 11].indexOf(s16) + (barIndex % 2) * 3]; if (n >= 0) realCounter.triggerAttackRelease(tones[n], STEP * 2, t, v(0.8)); }
         } else if (R.fam === 'bowed') {
           /* long notes, two beats each, along the counter line */
           if (s16 % 8 === 0) { const n = line[(s16 / 8) + (barIndex % 4) * 2]; if (n >= 0) realCounter.triggerAttackRelease(tones[n], BEAT * 2, t, v(0.8)); }
@@ -1356,8 +1452,29 @@ window.VinylPlayer.Generative = (() => {
         woodblock: [[4, 'woodblock'], [7, 'woodblock'], [11, 'woodblock'], [14, 'woodblock']],
         snap: [[4, 'snap'], [12, 'snap']]
       };
+      /* the hand drums and shakers, recorded (VCSL); where they did not load,
+         the machine's nearest: an agogo by the cowbell, a cajon by the congas */
+      const PERC_FALL = { agogo: 'cowbell', cajon: 'conga', darbuka: 'bongo', frame: 'conga', triangle: 'cowbell', slit: 'woodblock', claps: 'snap', finger: 'snap', guiro: 'woodblock' };
+      const realPerc = PERC_REAL[tr.percLayer] && SM[PERC_REAL[tr.percLayer][0]];
+      const shakeSet = SHAKE_REAL[tr.shake] && SM[SHAKE_REAL[tr.shake][0]];
+      const shakeIn = shakeSet ? lane((K.percPan || 0.3) * 1.3) : null;
       function layerAt(t, s16, g, barIndex) {
-        const p = tr.percLayer;
+        if (shakeSet) {
+          /* the shaker: every sixteenth, pushed and pulled with the groove's accents */
+          const nm = SHAKE_REAL[tr.shake][1][s16 % 4], b = shakeSet[nm];
+          if (b) hit(b, nudge(drift(t), G.hat), 0.16 * g * G.acc[s16] * loose(), shakeIn, shade());
+        }
+        if (realPerc) {
+          /* the line, and the phrase's last bar turned round: its second half an answer from the low drum */
+          const line = PERC_REAL[tr.percLayer][1], turn = barIndex % 4 === 3 && s16 >= 8;
+          line.forEach(([st, nm]) => {
+            if (st !== s16 || (turn && rnd() < 0.3)) return;
+            const b = realPerc[nm] || realPerc[Object.keys(realPerc)[0]];
+            hit(b, drift(t), 0.5 * g * loose() * (nm === 'mute' || nm === 'muted' || nm === 'soft' || nm === 'himute' || nm === 'lomute' ? 0.7 : 1), layerIn, shade());
+          });
+          return;
+        }
+        const p = PERC_FALL[tr.percLayer] || tr.percLayer;
         if (!p) return;
         if (p === 'clave') {
           /* son clave, three against two across two bars */
@@ -1373,13 +1490,14 @@ window.VinylPlayer.Generative = (() => {
       const revSnareInto = (t) => hit(E.revSnare, t - E.revSnare.duration, 0.7, snareIn);
       const whoosh = (t) => hit(E.whoosh, t, 0.6, crashIn);
       /* a piano chord played backwards, swelling up to the drop's downbeat */
-      const revPianoInto = tr.revPiano && SM.piano ? (() => {
-        const names = Object.keys(SM.piano), hzOf = (n) => { const m = /^([A-G]#?)(-?\d)$/.exec(n); return 440 * Math.pow(2, (['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'].indexOf(m[1]) + 12 * (Number(m[2]) + 1) - 69) / 12); };
+      const revPiano = SM[tr.piano] || SM.piano;
+      const revPianoInto = tr.revPiano && revPiano ? (() => {
+        const names = Object.keys(revPiano), hzOf = (n) => { const m = /^([A-G]#?)(-?\d)$/.exec(n); return 440 * Math.pow(2, (['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'].indexOf(m[1]) + 12 * (Number(m[2]) + 1) - 69) / 12); };
         const back = new Map();
         return (t, ch2) => {
           ch2.notes.slice(0, 3).forEach((f, i) => {
             const want = f * 2, n = names.reduce((a, b) => (Math.abs(Math.log(hzOf(b) / want)) < Math.abs(Math.log(hzOf(a) / want)) ? b : a));
-            if (!back.has(n)) back.set(n, reversed(SM.piano[n]));
+            if (!back.has(n)) back.set(n, reversed(revPiano[n]));
             const buf = back.get(n), rate = want / hzOf(n), dur = buf.duration / rate;
             hit(buf, t - dur + 0.02 * i, 0.32, keys, rate);
           });
@@ -1443,7 +1561,7 @@ window.VinylPlayer.Generative = (() => {
         if (turn && s16 === 15 && !LINE.some(([st]) => st === 15)) bass(t, ch.root * 2 * Math.pow(2, 7 / 12) / 2, g * 0.7, STEP * 0.9);
       }
       /* chords played on a piano or a Wurlitzer rather than a synth, where the style's rhythm asks */
-      const chordVoice = RH.voice === 'piano' ? sampler('piano', { release: 0.35, volume: -17 }) : RH.voice === 'wurli' ? wurliVoice() : null;
+      const chordVoice = RH.voice === 'piano' ? (sampler(tr.piano || 'piano', { release: 0.35, volume: -17 }) || sampler('piano', { release: 0.35, volume: -17 })) : RH.voice === 'wurli' ? wurliVoice() : null;
       if (chordVoice && RH.voice === 'piano') chordVoice.connect(keys);
       function chordsAt(t, s16, barIndex, ch0, g, invert) {
         /* the same chord, voiced up: its lowest note taken an octave higher */
