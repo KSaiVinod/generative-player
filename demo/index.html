@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>vinyl-player demo</title>
+<link rel="stylesheet" href="../vinyl-player.css">
+<link rel="stylesheet" href="demo.css">
+</head>
+<body>
+<main>
+  <h1>vinyl-player</h1>
+  <p class="lede">A turntable for any page. Drag the arm onto the record, hold the record to brake it, move it to scratch.</p>
+
+  <section>
+    <h2>Your own file <small>VinylPlayer.FileSource</small></h2>
+    <p><label class="pick">Choose an audio file <input type="file" id="file" accept="audio/*"></label>
+       <span id="fileName" class="note">or drop one on the deck</span></p>
+    <vinyl-player id="fileDeck" controls="start speed volume spectrum" label-top="side a" label-title="Your record"
+                  model="vinyl-player · fs-1" hint></vinyl-player>
+  </section>
+
+  <section>
+    <h2>A new track every time <small>VinylPlayer.Generative</small></h2>
+    <p class="note" id="genNote">Pressing the first record…</p>
+    <vinyl-player id="genDeck" controls="start speed like volume spectrum" label-top="side a" label-title="Generative"
+                  model="vinyl-player · gx-1" storage="vp-demo." hint></vinyl-player>
+  </section>
+
+  <section>
+    <h2>Small, stacked</h2>
+    <vinyl-player id="smallDeck" layout="stacked" controls="start volume" label-title="Mini" style="width:300px"></vinyl-player>
+  </section>
+</main>
+
+<script src="../analog.js"></script>
+<script src="../vinyl-player.js"></script>
+<script src="../file-source.js"></script>
+<script src="../engine/no-blob-workers.js"></script>
+<script src="../engine/vendor/tone/Tone.js"></script>
+<script src="../engine/vendor/tonejs-instruments/manifest.js"></script>
+<script src="../engine/generative.js"></script>
+<script src="demo.js"></script>
+</body>
+</html>

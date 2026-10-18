@@ -1,0 +1,308 @@
+/* ============================================================
+   vinyl-player — the turntable's look (vinyl-player.js builds it)
+
+   Everything is scoped to the element and its vp- classes, so it can sit
+   in any page. The look is set by the custom properties below: set them
+   on vinyl-player (or anything above it) to make it yours. They are on
+   :root so a page's own switches (vp-key, vp-print outside the element)
+   look the same. --vp-d, the platter's square, is set by the element from
+   its own width.
+
+   Two layouts, chosen by the element (the layout attribute, or its own
+   width): stacked, the platter on top and the switches along the bottom
+   edge; wide, the classic deck, the platter on the left, START·STOP and
+   the speeds in the corner it leaves free, the spectrum and the fader in
+   the right-hand column.
+   ============================================================ */
+:root{
+  --vp-accent:#F5515F;            /* the needle's lamp, focus rings, the hover */
+  --vp-accent-rgb:245,81,95;
+  --vp-accent-hot:#FF7A86;
+  --vp-accent-hot-rgb:255,122,134;
+  --vp-label-ink:#9F041B;         /* the label's colour */
+  --vp-lamp:#ff4a52;              /* the switches' lamps */
+  --vp-lamp-glow:#ff3b44;
+  --vp-cream:#F2EDE6;
+  --vp-dim:#9C958C;
+  --vp-print-ink:#8a837b;         /* what is printed on the plinth */
+  --vp-mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --vp-display:"Fraunces",Georgia,serif;
+  --vp-ease:cubic-bezier(.22,.61,.36,1);
+  --vp-dur:220ms;
+}
+vinyl-player{
+  --vp-d:320px;
+  display:block;position:relative;max-width:100%;
+  color:var(--vp-cream);font-family:var(--vp-mono);
+  -webkit-tap-highlight-color:transparent;
+}
+vinyl-player *,vinyl-player *::before,vinyl-player *::after{box-sizing:border-box;}
+vinyl-player:not(:defined){display:block;min-height:200px;}
+
+/* ── the body ─────────────────────────────────────────────────────── */
+.vp-plinth{position:relative;display:grid;
+  grid-template-columns:var(--vp-d) calc(var(--vp-d) * .14);
+  grid-template-areas:"deck side" "keys keys";
+  row-gap:clamp(14px,3vw,20px);
+  padding:calc(var(--vp-d) * .07) calc(var(--vp-d) * .05) 16px;border-radius:18px;border:1px solid #2e2b31;
+  background:
+    repeating-linear-gradient(90deg,rgba(255,255,255,.013) 0 1px,transparent 1px 3px),
+    linear-gradient(160deg,#252228,#18161b 45%,#0f0e11);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.08),inset 0 -2px 0 rgba(0,0,0,.6),
+    0 2px 0 #08070a,0 34px 70px rgba(0,0,0,.6);}
+/* the maker's line, engraved in the corner (the model attribute) */
+.vp-model{position:absolute;z-index:3;top:12px;left:16px;margin:0;
+  font-family:var(--vp-mono);font-size:.48rem;letter-spacing:.24em;text-transform:uppercase;
+  color:#5a535d;pointer-events:none;white-space:nowrap;}
+.vp-deck{grid-area:deck;width:var(--vp-d);position:relative;}
+.vp-controls{grid-area:keys;display:flex;align-items:flex-end;justify-content:space-between;gap:12px;}
+
+/* ── the platter and the record ───────────────────────────────────── */
+.vp-zone{position:relative;aspect-ratio:1;width:100%;pointer-events:none;}
+/* the rim: brushed metal and a ring of strobe dots */
+.vp-strobe{position:absolute;inset:-2.2%;border-radius:50%;pointer-events:none;
+  background:
+    repeating-conic-gradient(rgba(255,255,255,.13) 0 .9deg,transparent .9deg 3.6deg),
+    conic-gradient(from 200deg,#2a272c,#46424a,#2a272c,#1c1a1e,#2a272c);
+  -webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 1.9%),#000 calc(100% - 1.8%),#000 calc(100% - .3%),transparent 100%);
+          mask:radial-gradient(farthest-side,transparent calc(100% - 1.9%),#000 calc(100% - 1.8%),#000 calc(100% - .3%),transparent 100%);}
+.vp-platter{
+  position:absolute;inset:0;border-radius:50%;
+  background:radial-gradient(circle at 50% 50%,#151417 0 27%,#0E0D0F 27.4% 100%),#0E0D0F;
+  border:1px solid #2F2D33;
+  box-shadow:0 0 0 10px #121214,0 0 0 11px #2A272C,inset 0 0 70px rgba(0,0,0,.9);
+  display:grid;place-items:center;
+}
+/* the bare platter: a mat and a spindle, before a record goes on */
+.vp-platter::after{content:"";position:absolute;top:50%;left:50%;width:2.2%;height:2.2%;transform:translate(-50%,-50%);
+  border-radius:50%;background:radial-gradient(circle at 35% 35%,#f2ede6,#8f8a81 60%,#45424a);z-index:0;}
+.vp-record{
+  position:relative;z-index:1;width:88%;height:88%;border-radius:50%;
+  background:
+    radial-gradient(circle at 50% 50%,#080809 0 15.5%,transparent 15.6%),
+    radial-gradient(circle at 34% 30%,#1F1E21,#080809 62%);
+  box-shadow:inset 0 0 40px rgba(0,0,0,.95),0 12px 40px -18px #000;
+  will-change:transform;display:grid;place-items:center;
+}
+.vp-grooves{
+  position:absolute;inset:0;border-radius:50%;
+  background:repeating-radial-gradient(circle at 50% 50%,rgba(255,255,255,.055) 0 1px,rgba(0,0,0,0) 1px 4px);
+  -webkit-mask:radial-gradient(circle,transparent 0 16%,#000 16.5% 99%,transparent 100%);
+          mask:radial-gradient(circle,transparent 0 16%,#000 16.5% 99%,transparent 100%);
+  opacity:.8;
+}
+.vp-sheen{
+  position:absolute;inset:0;border-radius:50%;pointer-events:none;
+  background:conic-gradient(from 210deg,
+    transparent 0deg,rgba(243,234,223,.11) 22deg,transparent 52deg,
+    transparent 180deg,rgba(var(--vp-accent-rgb),.09) 202deg,transparent 236deg);
+  mix-blend-mode:screen;
+}
+.vp-label{
+  position:relative;width:35%;height:35%;border-radius:50%;
+  background:radial-gradient(circle at 38% 32%,#757066,var(--vp-label-ink) 62%,#3C3A42);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;padding:11%;overflow:hidden;
+  box-shadow:inset 0 0 18px rgba(0,0,0,.45);
+  transition:background 400ms var(--vp-ease);
+}
+/* a label of the page's own (children with slot="label") fills it */
+.vp-label.has-art{padding:0;background:radial-gradient(circle at 38% 32%,#2b272b,#141215 62%,#0b0a0c);}
+.vp-label-art{position:absolute;inset:0;display:block;}
+.vp-label-art > *{position:absolute;inset:7%;width:86%;height:86%;overflow:visible;pointer-events:none;}
+.vp-label-art > img{object-fit:cover;inset:0;width:100%;height:100%;border-radius:50%;}
+.vp-label-top,.vp-label-sub{font-size:.44rem;letter-spacing:.18em;color:rgba(255,235,215,.7);line-height:1;white-space:nowrap;text-transform:uppercase;}
+.vp-label-top{margin-bottom:8%;}
+.vp-label-sub{margin-top:8%;letter-spacing:.14em;color:rgba(255,235,215,.6);}
+.vp-label-title{font-family:var(--vp-display);font-weight:700;font-size:calc(var(--vp-d) * .022 + 3px);
+  line-height:1.05;color:#FFF3E6;max-width:100%;overflow:hidden;overflow-wrap:anywhere;
+  display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;}
+.vp-label.has-art .vp-label-top,.vp-label.has-art .vp-label-title,.vp-label.has-art .vp-label-sub{display:none;}
+/* the speed on the label, as printed on a real one */
+.vp-rpmtag{position:absolute;left:0;right:0;bottom:5%;font-size:.42rem;letter-spacing:.14em;color:rgba(255,235,215,.55);pointer-events:none;}
+.vp-spindle{
+  position:absolute;top:50%;left:50%;width:7px;height:7px;margin:-3.4px 0 0 -3.4px;
+  border-radius:50%;background:#080809;box-shadow:0 0 0 2px rgba(0,0,0,.45);
+  opacity:.9;pointer-events:none;
+}
+/* a 45 has the big hole */
+vinyl-player.is-45 .vp-spindle{width:18%;height:18%;margin:-9% 0 0 -9%;background:#0a090b;opacity:1;
+  box-shadow:0 0 0 2px rgba(255,255,255,.08),inset 0 0 6px rgba(0,0,0,.9);}
+vinyl-player.is-45 .vp-rpmtag{color:rgba(255,235,215,.8);}
+
+/* the record is the play button; a hand on it brakes and scratches */
+.vp-drop{display:block;position:relative;cursor:pointer;border-radius:50%;outline:none;touch-action:none;}
+.vp-drop:focus-visible{box-shadow:0 0 0 3px var(--vp-accent);}
+vinyl-player.is-held .vp-drop{cursor:grabbing;}
+
+/* ── the tonearm ──────────────────────────────────────────────────── */
+.vp-arm{
+  position:absolute;top:8%;right:-4%;width:52%;height:62%;z-index:2;
+  transform-origin:90% 10%;
+  transform:rotate(-62deg);
+  transition:transform 900ms cubic-bezier(0.65,0,0.35,1);
+  cursor:grab;touch-action:none;
+  /* the arm takes a hand only at itself (its head and a wide grip along
+     the tube), so the rest of the record stays the play button */
+  pointer-events:none;
+}
+.vp-arm.is-tracking{transition:transform 400ms linear;}      /* moving with the music */
+.vp-arm.is-dragging{cursor:grabbing;transition:none;}
+.vp-arm:focus-visible{outline:none;}
+.vp-arm-svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible;}
+.vp-armbase{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none;}
+.vp-arm-hit{pointer-events:stroke;}
+.vp-headshell{pointer-events:visiblePainted;}
+.vp-arm-base circle:first-child{transition:stroke 220ms var(--vp-ease);}
+.vp-arm:focus-visible .vp-arm-base circle:first-child{stroke:var(--vp-accent);stroke-width:4;}
+.vp-stylus{fill:#D9D4CC;transition:fill var(--vp-dur) var(--vp-ease),filter var(--vp-dur) var(--vp-ease);}
+.vp-headshell > path:nth-of-type(1){transition:stroke 220ms var(--vp-ease);}
+@media (hover:hover) and (pointer:fine){
+  .vp-arm:hover .vp-headshell > path:nth-of-type(1){stroke:var(--vp-accent);}
+  .vp-arm:hover .vp-stylus{fill:var(--vp-accent);}
+}
+.vp-arm:focus-visible .vp-headshell > path:nth-of-type(1){stroke:var(--vp-accent);}
+/* lifted off the groove while dragged: it rises a little off its shadow */
+.vp-arm-body{transition:transform 140ms var(--vp-ease);}
+.vp-arm.is-dragging .vp-arm-body{transform:translate(-2px,-5px);}
+.vp-arm.is-dragging .vp-headshell > path:nth-of-type(1){stroke:var(--vp-accent-hot);}
+.vp-arm.is-dragging .vp-stylus{
+  fill:var(--vp-accent-hot);filter:drop-shadow(0 0 6px rgba(var(--vp-accent-hot-rgb),.95));
+  animation:vpStylus 220ms steps(2,end) infinite;
+}
+@keyframes vpStylus{0%,100%{opacity:1;}50%{opacity:.55;}}
+/* the laser at the needle: lit while the needle is down, dimmer as an aim
+   while the arm is carried */
+.vp-laser{opacity:0;transition:opacity 260ms ease;}
+vinyl-player.is-on .vp-laser{opacity:1;}
+.vp-arm.is-dragging .vp-laser{opacity:.7;}
+.vp-laser-halo{transform-box:fill-box;transform-origin:center;}
+vinyl-player.is-on .vp-laser-halo{animation:vpLaser 1.8s ease-in-out infinite;}
+@keyframes vpLaser{0%,100%{opacity:.75;transform:scale(.88)}50%{opacity:1;transform:scale(1.08)}}
+
+/* ── the switches ─────────────────────────────────────────────────── */
+.vp-ctl{display:flex;flex-direction:column;align-items:center;gap:7px;}
+.vp-print{font-family:var(--vp-mono);font-size:.52rem;letter-spacing:.2em;text-transform:uppercase;color:var(--vp-print-ink);line-height:1;}
+.vp-speed{display:flex;gap:8px;}
+/* a push-button: a squared cap on a short travel, its depth the shadow
+   under it; pressed, it sinks onto the plate */
+.vp-key{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;
+  width:52px;height:38px;padding:0;border-radius:3px;border:1px solid #050405;cursor:pointer;
+  background:linear-gradient(180deg,#34313a 0%,#232027 46%,#1a181d 100%);
+  color:#cfc9c0;font-family:var(--vp-mono);font-size:.72rem;letter-spacing:.06em;-webkit-tap-highlight-color:transparent;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.14),inset 0 -2px 0 rgba(0,0,0,.35),0 3px 0 #08070a,0 5px 8px rgba(0,0,0,.55);
+  transition:transform 90ms cubic-bezier(0.23,1,0.32,1),box-shadow 90ms cubic-bezier(0.23,1,0.32,1);}
+/* the lamp: a slit of red glass in the cap */
+.vp-key i{display:block;width:14px;height:3px;border-radius:1px;background:#3b1418;
+  box-shadow:inset 0 1px 1px rgba(0,0,0,.6);transition:background-color 140ms ease,box-shadow 140ms ease;}
+/* the chosen speed's glass is warmer even unlit; it lights only while the
+   motor runs, as on a real deck */
+.vp-key[aria-checked="true"] i{background:#5a1c21;}
+vinyl-player.is-on .vp-key[aria-checked="true"] i{background:var(--vp-lamp);box-shadow:0 0 6px var(--vp-lamp-glow),0 0 12px rgba(255,59,68,.55);}
+.vp-key:active,.vp-key.is-down{transform:translateY(3px);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.08),inset 0 -1px 0 rgba(0,0,0,.35),0 0 0 #08070a,0 1px 2px rgba(0,0,0,.6);}
+.vp-key:focus-visible{outline:2px solid var(--vp-accent);outline-offset:3px;}
+/* START·STOP: the big one, a wider cap with a stripe */
+.vp-key--start{width:78px;}
+.vp-key--start b{display:block;width:26px;height:3px;border-radius:2px;background:#8f8a81;transition:background-color 140ms ease,box-shadow 140ms ease;}
+.vp-key--start[aria-pressed="true"] b{background:var(--vp-lamp);box-shadow:0 0 6px var(--vp-lamp-glow);}
+/* like: its lamp lights for the record that was liked, until the next one */
+.vp-key--like{font-variant-emoji:text;}
+.vp-key--like[aria-pressed="true"] i{background:var(--vp-lamp);box-shadow:0 0 6px var(--vp-lamp-glow),0 0 12px rgba(255,59,68,.55);}
+
+/* the fader: a slot cut in the plate, a printed scale beside it, and a
+   ridged cap that rides in it */
+.vp-fader{position:relative;display:block;width:140px;height:38px;}
+.vp-fader::before{content:"";position:absolute;left:7px;right:7px;bottom:3px;height:5px;
+  background:repeating-linear-gradient(90deg,#5d5852 0 1px,transparent 1px calc((100% - 1px) / 10));
+  background-size:100% 100%;opacity:.8;pointer-events:none;}
+.vp-fader input{-webkit-appearance:none;appearance:none;position:absolute;inset:0;width:100%;height:30px;
+  margin:0;background:transparent;cursor:pointer;}
+.vp-fader input::-webkit-slider-runnable-track{height:6px;border-radius:3px;background:#060507;
+  box-shadow:inset 0 1px 2px rgba(0,0,0,.9),0 1px 0 rgba(255,255,255,.06);}
+.vp-fader input::-moz-range-track{height:6px;border-radius:3px;background:#060507;box-shadow:inset 0 1px 2px rgba(0,0,0,.9),0 1px 0 rgba(255,255,255,.06);}
+.vp-fader input::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:26px;margin-top:-10px;border-radius:2px;border:1px solid #0a090b;
+  background:
+    linear-gradient(90deg,transparent 7px,var(--vp-lamp) 7px 9px,transparent 9px),
+    repeating-linear-gradient(180deg,rgba(0,0,0,.35) 0 1px,transparent 1px 3px),
+    linear-gradient(90deg,#8d8780,#d9d3ca 45%,#a29c94);
+  box-shadow:0 3px 5px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.4);
+  transition:transform 90ms cubic-bezier(0.23,1,0.32,1);}
+.vp-fader input::-moz-range-thumb{width:16px;height:26px;border-radius:2px;border:1px solid #0a090b;
+  background:linear-gradient(90deg,transparent 7px,var(--vp-lamp) 7px 9px,transparent 9px),repeating-linear-gradient(180deg,rgba(0,0,0,.35) 0 1px,transparent 1px 3px),linear-gradient(90deg,#8d8780,#d9d3ca 45%,#a29c94);
+  box-shadow:0 3px 5px rgba(0,0,0,.6);}
+.vp-fader input:active::-webkit-slider-thumb{transform:translateY(1px) scale(1.04);}
+.vp-fader input:focus-visible{outline:2px solid var(--vp-accent);outline-offset:2px;border-radius:3px;}
+
+/* the spectrum display: a recessed window of LED segments; only where the
+   body has room for it (the wide layout) */
+.vp-eq{display:none;flex-direction:column;align-items:center;gap:7px;}
+.vp-eq-screen{flex:1;width:100%;min-height:0;display:block;border-radius:4px;
+  background:linear-gradient(180deg,#09080a,#110f12);
+  box-shadow:inset 0 2px 6px rgba(0,0,0,.9),inset 0 0 0 1px #050405,0 1px 0 rgba(255,255,255,.06);}
+
+/* the hint line, when the element has one */
+.vp-hint{margin:14px 0 0;text-align:center;font-family:var(--vp-mono);font-size:.62rem;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--vp-dim);transition:opacity 300ms ease;min-height:1em;}
+.vp-hint.is-quiet{opacity:0;}
+
+/* stacked and small (a phone) */
+vinyl-player.is-compact .vp-controls{gap:8px;}
+vinyl-player.is-compact .vp-key{width:44px;height:36px;}
+vinyl-player.is-compact .vp-key--start{width:58px;}
+vinyl-player.is-compact .vp-fader{width:88px;}
+vinyl-player.is-compact .vp-hint{letter-spacing:.1em;font-size:.58rem;}
+
+/* ── wide: laid out as the classic deck is ─────────────────────────────
+   The platter all but fills the body's height; START·STOP in the corner
+   the round platter leaves free at the bottom left, the speeds beside it;
+   a 45 adapter in the top-left corner; the arm's base at the top of the
+   right-hand column, the spectrum below it and the fader standing below
+   that, where the pitch fader is. Everything in fractions of --vp-d. */
+vinyl-player.is-wide .vp-plinth{display:block;width:calc(var(--vp-d) * 1.38);height:calc(var(--vp-d) * 1.13);padding:0;border-radius:10px;}
+vinyl-player.is-wide .vp-deck{position:absolute;left:calc(var(--vp-d) * .045);top:calc(var(--vp-d) * .04);}
+vinyl-player.is-wide .vp-controls{display:contents;}
+vinyl-player.is-wide .vp-controls > .vp-ctl{position:absolute;}
+vinyl-player.is-wide .vp-ctl--start{left:calc(var(--vp-d) * .035);bottom:calc(var(--vp-d) * .03);}
+vinyl-player.is-wide .vp-ctl--speed{left:calc(var(--vp-d) * .035 + 82px);bottom:calc(var(--vp-d) * .025);}
+vinyl-player.is-wide .vp-ctl--like{left:calc(var(--vp-d) * .035 + 194px);bottom:calc(var(--vp-d) * .025);}
+vinyl-player.is-wide .vp-ctl--volume{right:calc(var(--vp-d) * .1);bottom:calc(var(--vp-d) * .06);}
+vinyl-player.is-wide .vp-ctl--start .vp-print,vinyl-player.is-wide .vp-ctl--speed .vp-print,vinyl-player.is-wide .vp-ctl--like .vp-print{display:none;}
+vinyl-player.is-wide .vp-key--like{width:42px;height:30px;font-size:.62rem;gap:3px;}
+/* START·STOP and the speeds say what they are on the keys, as on the deck */
+vinyl-player.is-wide .vp-key--start{width:68px;height:44px;}
+vinyl-player.is-wide .vp-key--start::after{content:"start \00b7  stop";font-family:var(--vp-mono);font-size:.42rem;letter-spacing:.16em;text-transform:uppercase;color:#9a938a;}
+vinyl-player.is-wide .vp-speed .vp-key{width:42px;height:30px;font-size:.62rem;gap:3px;}
+vinyl-player.is-wide .vp-fader{--fh:min(170px,calc(var(--vp-d) * .4));width:40px;height:var(--fh);}
+vinyl-player.is-wide .vp-fader input{inset:auto;left:calc(20px - var(--fh) / 2);top:calc(var(--fh) / 2 - 20px);
+  width:var(--fh);height:40px;transform:rotate(-90deg);}
+vinyl-player.is-wide .vp-fader::before{left:auto;right:-6px;top:7px;bottom:7px;width:5px;height:auto;
+  background:repeating-linear-gradient(180deg,#5d5852 0 1px,transparent 1px calc((100% - 1px) / 10));}
+vinyl-player.is-wide .vp-eq{display:flex;position:absolute;right:calc(var(--vp-d) * .06);top:calc(var(--vp-d) * .13);
+  width:calc(var(--vp-d) * .19);height:calc(var(--vp-d) * .42);}
+/* the 45 adapter, parked in its corner */
+vinyl-player.is-wide .vp-plinth::before{content:"";position:absolute;left:calc(var(--vp-d) * .035);top:calc(var(--vp-d) * .035);
+  width:calc(var(--vp-d) * .1);height:calc(var(--vp-d) * .1);border-radius:50%;pointer-events:none;
+  background:
+    radial-gradient(circle,#0b0a0c 0 12%,transparent 13%),
+    radial-gradient(circle,transparent 0 30%,#1d1b20 31% 68%,transparent 69%),
+    repeating-conic-gradient(#2a272d 0 8deg,#141216 8deg 60deg),
+    #141216;
+  box-shadow:inset 0 0 0 1px #34313a,0 3px 6px rgba(0,0,0,.5);}
+vinyl-player.is-wide .vp-model{top:auto;left:auto;right:calc(var(--vp-d) * .1);bottom:calc(var(--vp-d) * .015);}
+
+/* Windows renders small type thinner: a step up */
+vinyl-player.is-win .vp-label-top,vinyl-player.is-win .vp-label-sub{font-size:.5rem;}
+vinyl-player.is-win .vp-model{font-size:.54rem;}
+vinyl-player.is-win .vp-print{font-size:.58rem;}
+vinyl-player.is-win .vp-key--start::after,vinyl-player.is-win .vp-rpmtag{font-size:.48rem;}
+
+@media (forced-colors:active){
+  .vp-key{border:1px solid ButtonText;}
+  .vp-key b,.vp-key i,.vp-eq{forced-color-adjust:none;}
+}
+@media (prefers-reduced-motion:reduce){
+  vinyl-player.is-on .vp-laser-halo{animation:none;}
+  .vp-arm,.vp-key,.vp-fader input::-webkit-slider-thumb{transition:none;}
+  .vp-key:active,.vp-key.is-down{transform:none;}
+}

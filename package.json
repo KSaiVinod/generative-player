@@ -1,0 +1,19 @@
+{
+  "name": "@analogdialog/vinyl-player",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A turntable web component: drag the arm, brake and scratch the record, 33/45, a fader and a spectrum. Plays any audio file, or a generative engine that makes a new track every time.",
+  "browser": "vinyl-player.js",
+  "style": "vinyl-player.css",
+  "files": [
+    "vinyl-player.js",
+    "vinyl-player.css",
+    "file-source.js",
+    "stylus.js",
+    "analog.js",
+    "engine/",
+    "README.md"
+  ],
+  "keywords": ["turntable", "vinyl", "web-component", "audio", "scratch", "generative-music"],
+  "license": "UNLICENSED"
+}

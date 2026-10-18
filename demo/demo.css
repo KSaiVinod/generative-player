@@ -1,0 +1,13 @@
+:root{color-scheme:dark;}
+body{margin:0;background:#0B0907;color:#F2EDE6;font:16px/1.6 Georgia,serif;}
+main{max-width:860px;margin:0 auto;padding:48px 16px 96px;}
+h1{font-size:2.4rem;margin:0 0 8px;letter-spacing:-.01em;}
+h2{font-size:1.2rem;margin:56px 0 12px;}
+h2 small{font:400 .7rem/1 ui-monospace,monospace;letter-spacing:.12em;color:#9C958C;margin-left:8px;}
+.lede{color:#9C958C;margin:0;}
+.note{font:400 .72rem/1.4 ui-monospace,monospace;letter-spacing:.08em;color:#9C958C;}
+.pick{display:inline-flex;align-items:center;gap:10px;min-height:44px;padding:0 16px;border:1px solid #3a353d;border-radius:8px;
+  font:400 .72rem/1 ui-monospace,monospace;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;margin-right:12px;}
+.pick input{position:absolute;opacity:0;width:1px;height:1px;}
+.pick:focus-within{outline:2px solid #F5515F;outline-offset:3px;}
+vinyl-player{margin-top:16px;}

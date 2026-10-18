@@ -1,0 +1,183 @@
+# vinyl-player
+
+A turntable you can drop into any page, as a `<vinyl-player>` element.
+
+- **The record is the play button.** Tap it to start or stop.
+- **The arm is the seek control.** Drag it onto the record and the music plays from where the needle lands. Carry it off the record and the record stops.
+- **A hand on a playing record brakes it.** Move your hand and the music follows it, forwards and backwards: a scratch.
+- **The switches:**
+  - START·STOP.
+  - 33/45. Changing belt slides the pitch, as a real belt does.
+  - A volume fader with ten clicking detents.
+  - A spectrum display of what is playing.
+- **On a phone, the switches tap back.**
+
+It has no dependencies and needs no build step. It is plain scripts and one stylesheet.
+
+## The files
+
+| File | What it is | Needed |
+|---|---|---|
+| `vinyl-player.js` | The element | yes |
+| `vinyl-player.css` | Its look | yes |
+| `stylus.js` | The AudioWorklet that plays a record at any speed, either way. The sources load it themselves. | yes |
+| `file-source.js` | `VinylPlayer.FileSource`: any audio file | to play files |
+| `analog.js` | `VinylPlayer.Analog`: surface noise, the needle drop and the scratch sound, over whatever plays | optional |
+| `engine/` | `VinylPlayer.Generative`: a new track made in the browser every time, plus Tone.js, sampled instruments and a melody model (about 20 MB) | optional |
+| `demo/` | A page with all three. Serve the folder and open `demo/`. | no |
+
+Every script finds its own files next to itself, so the folder can be served from any path.
+
+## A deck that plays a file
+
+```html
+<link rel="stylesheet" href="/vinyl-player/vinyl-player.css">
+<script src="/vinyl-player/vinyl-player.js"></script>
+<script src="/vinyl-player/file-source.js"></script>
+<script src="/vinyl-player/analog.js"></script>   <!-- optional: the crackle -->
+
+<vinyl-player src="/music/side-a.mp3" label-title="Side A" hint></vinyl-player>
+```
+
+To play something else, or a file chosen by the visitor:
+
+```js
+const deck = document.querySelector('vinyl-player');
+deck.source = VinylPlayer.FileSource(fileInput.files[0]);        // a File or Blob
+deck.source = VinylPlayer.FileSource('/music/b.mp3', { rpm: 45 }); // a 45
+```
+
+A file from another origin needs CORS headers.
+
+## A deck that makes its own music
+
+```html
+<script src="/vinyl-player/engine/no-blob-workers.js"></script>   <!-- only under a CSP without blob: workers -->
+<script src="/vinyl-player/engine/vendor/tone/Tone.js"></script>
+<script src="/vinyl-player/engine/vendor/tonejs-instruments/manifest.js"></script>
+<script src="/vinyl-player/engine/generative.js" data-likes-key="my-app.likes"></script>
+<script src="/vinyl-player/vinyl-player.js"></script>
+
+<vinyl-player id="deck" controls="start speed like volume spectrum"></vinyl-player>
+<script type="module">
+  const deck = document.getElementById('deck');
+  deck.source = VinylPlayer.Generative;
+  VinylPlayer.Generative.style('deep');              // optional: one of .styles, or '' for the rotation
+  await VinylPlayer.Generative.prepare();            // arms it and presses the first record
+</script>
+```
+
+The engine's extras:
+
+- `styles`: a list of `[key, label]` pairs.
+- `style(key)`: makes every new record in that style.
+- `warm(key)`: presses the first half of a record ahead of time.
+- `prefetch(key)`: fetches that style's instruments into the browser cache.
+- `like()`: the LIKE key calls this, so later records lean towards the liked one.
+- `flip()` and `prepareB()`: the hidden B-side.
+- `onsamples` and `onpressing`: progress hooks for a loader.
+
+## Attributes
+
+| Attribute | Default | What it does |
+|---|---|---|
+| `src` | — | Plays this file. Needs `file-source.js`. |
+| `controls` | `start speed volume spectrum like` | The switches on the plinth, in any order. LIKE shows only when the source can `like()`. |
+| `layout` | `auto` | `wide` is the classic deck (platter left, fader and spectrum on the right). `stacked` puts the platter on top and the switches below. `auto` is `wide` from 600px of the element's own width. |
+| `model` | `vinyl-player · direct drive` | The line engraved on the plinth. |
+| `label-top`, `label-title`, `label-sub` | `side a`, `—`, — | The words on the label. |
+| `rpm` | `33` | The starting belt. |
+| `volume` | `7` | The fader, from 0 to 10. |
+| `storage` | — | A localStorage prefix. With it, the belt and the volume are remembered. |
+| `hint` | — | Shows a line under the deck saying what to do. The same text is sent in `vp-hint` events either way. |
+| `analog` | — | `off` turns off the analog layer even when `analog.js` is loaded. |
+
+Your own label: give the element children with `slot="label"`, such as an `<svg>` or an `<img>`. They are placed on the label and turn with the record.
+
+```html
+<vinyl-player><img slot="label" src="/cover.jpg" alt=""></vinyl-player>
+```
+
+## Properties and methods
+
+- `deck.source`: what plays. Set it at any time.
+- `deck.play(from?)`: puts the needle down. `from` runs from 0 (the outer groove) to 1.
+- `deck.play(from, how)`: the same, but `how()` starts the sound instead of the source's own `start()`. The soon page uses this for its B-side flip.
+- `deck.stop()`: a brake, not a cut.
+- `deck.toggle()`: plays or stops.
+- `deck.playing`: whether it is playing (read-only).
+- `deck.speed`: 33 or 45.
+- `deck.volume`: 0 to 10.
+- `deck.parts`: the element's pieces, for a page that animates them: `plinth`, `deck`, `drop`, `zone`, `platter`, `record`, `label`, `arm`, `controls`, `start`, `like`, `fader`, `eq` and `hint`.
+- `VinylPlayer.haptic(ms)`: the same phone tap the deck uses, for a page's own switches.
+
+## Events
+
+All events bubble.
+
+| Event | When | `detail` |
+|---|---|---|
+| `vp-play` | the needle goes down | `{ from }` |
+| `vp-stop` | the record is stopped | — |
+| `vp-end` | a file has played to the end | — |
+| `vp-change` | a new record is on the platter | the source's track (it has `rpm`; the engine's tracks also have `style`, `side` and more) |
+| `vp-hint` | what the deck would say | the text (`''` while it is playing) |
+| `vp-scratch` | a scratch turns direction at speed | `{ flips }`, counted from when the hand went down |
+| `vp-like` | the LIKE key took | — |
+
+## Writing your own source
+
+A source is an object with these members. Look at `file-source.js`, which is short.
+
+```
+start(delay, at) → Promise   put the needle down at `at` (0..1); the motor runs up over `delay` seconds
+stop()                       a brake: slow to a halt
+hold() / scratch(rate) / release()   a hand on the record: still, moved at `rate` (negative = backwards), let go
+seek(at)                     the needle dropped somewhere else
+lift(up)                     the needle in the air (silent) or back down
+volume(0..1), speed(33|45)
+position() → 0..1            where the needle is
+spin() → number              how fast the platter turns, relative to 33⅓ (it draws the record)
+recordRpm                    the record's own speed (33.33 or 45)
+levels(Uint8Array) → bool, bins, sampleRate   the spectrum: byte frequency data, like an AnalyserNode
+playing
+click(heavy)                 optional: the switches' tick
+like()                       optional: shows the LIKE key
+onchange = fn(track), onend = fn()   set by the deck
+```
+
+## Theming
+
+Set custom properties on `vinyl-player` or on `:root`:
+
+- `--vp-accent`, `--vp-accent-rgb`, `--vp-accent-hot`, `--vp-accent-hot-rgb`: the hover colour, the focus rings and the arm's highlight while it is dragged.
+- `--vp-label-ink`: the label's colour.
+- `--vp-lamp` and `--vp-lamp-glow`: the switches' lamps.
+- `--vp-cream`, `--vp-dim` and `--vp-print-ink`: the text colours.
+- `--vp-mono` and `--vp-display`: the fonts.
+- `--vp-ease` and `--vp-dur`: the motion.
+
+The element sizes itself from its own width, so to make it bigger or smaller, give it a width.
+
+## Content Security Policy
+
+- **`stylus.js` is an AudioWorklet module.** It is loaded from the same place as the other files, so `script-src 'self'` covers it when the files are on your own origin.
+- **The generative engine renders with Tone.js.** Tone loads its own worklet processors as `blob:` scripts and fetches them first, so the page needs `blob:` in both `script-src` and `connect-src`.
+- **`engine/no-blob-workers.js` quiets Tone's clock Worker.** Tone tries to start it from a `blob:` URL; this file refuses that before Tone loads, so a strict policy logs no error and Tone falls back to its timer clock.
+- **The melody model is TensorFlow.js.** It is loaded only once the first record is playing.
+
+## Credits
+
+The engine plays sampled instruments from [tonejs-instruments](https://github.com/nbrosowsky/tonejs-instruments) by Nicholaus P. Brosowsky, under [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/). That licence asks for a credit wherever the engine is used. The recordings come from:
+
+- the VSCO 2 Community Edition;
+- Karoryfer Samples;
+- the University of Iowa Electronic Music Studios;
+- Freesound contributors flcellogrl, quartertone and donyaquick.
+
+Other parts:
+
+- [Tone.js](https://tonejs.github.io): MIT.
+- [MusicVAE](https://magenta.tensorflow.org/music-vae) (Magenta, Google), run with TensorFlow.js: Apache 2.0.
+
+The licence texts are in `engine/vendor/`.
