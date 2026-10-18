@@ -3,7 +3,8 @@
 
    Original music, made in the browser: no file, no sample, nothing
    licensed. Every time the needle goes down it is a new track, and first
-   of all a new STYLE - one of twelve:
+   of all a new STYLE - one of these (in the shuffle, all but lo-fi and
+   uplifting trance, which play only when asked for by name):
 
      house              122-126  the 909, organ and stab chords, a bouncing bass
      deep house         118-122  swung, dark seventh-chord stabs, an electric piano
@@ -281,7 +282,9 @@ window.VinylPlayer.Generative = (() => {
     [[12, 'open', 0.16], [14, 'snare', 0.45], [15, 'snare', 0.5]],
     [[13, 'snare', 0.3], [14, 'tomHi', 0.5], [15, 'tomLo', 0.55]]
   ];
-  const ROTATION = ['house', 'deep', 'prog', 'melodic', 'uplift', 'trance', 'lofi', 'disco', 'acid', 'chicago', 'minimal', 'tech'];
+  /* the shuffle. Lo-fi and uplifting trance are left out of it (they are
+     still there for a page that asks for one by name, style('lofi')) */
+  const ROTATION = ['house', 'deep', 'prog', 'melodic', 'trance', 'disco', 'acid', 'chicago', 'minimal', 'tech'];
   let chosen = null;                                 // the style the visitor picked, or none: the rotation
   const ARPS = [[0, 1, 2, 1], [0, 2, 1, 2], [2, 1, 0, 1], [0, 1, 2, 3]];
 
@@ -2055,7 +2058,7 @@ window.VinylPlayer.Generative = (() => {
   const shelf = {};                                // by rpm
   let armed = false;                               // until START, only the opening of one record is pressed
   function setStyle(name) {
-    chosen = ROTATION.indexOf(name) >= 0 ? name : null;
+    chosen = STYLES[name] && name !== 'bside' ? name : null;
     Object.keys(shelf).forEach((k) => { if (shelf[k] && chosen && shelf[k].tr.style !== chosen) { shelf[k].kill(); shelf[k] = null; } });
   }
   function press(rpm) {
