@@ -667,7 +667,7 @@ window.VinylPlayer.Generative = (() => {
     if (bright(tr.lead2) && bright(tr.counter)) tr.counter = pickIn((X.counter || []).filter((v) => counterOk(v) && !bright(v)));
     if (tr.shake && tr.beat.p.length >= 4) tr.shake = null;
     /* every sampled instrument this track will need loaded */
-    const synthLead = { pluck: 1, supersaw: 1, bell: 1, acid: 1, organ: 1, keys: 1, sawlead: 1, squarelead: 1 };
+    const synthLead = { pluck: 1, supersaw: 1, bell: 1, acid: 1, keys: 1, sawlead: 1, squarelead: 1 };
     const RESP_SAMPLES = { 'brass-hit': ['trumpet', 'trombone'], 'string-stab': ['violin'], 'guitar-lick': ['guitar-electric'], 'sax-lick': ['saxophone'] };
     tr.samples = [...new Set([
       ...(RESP_SAMPLES[tr.resp] || []), tr.revPiano || tr.rhythm === 'piano' ? tr.piano : null,
@@ -759,6 +759,15 @@ window.VinylPlayer.Generative = (() => {
      Sampler fills the notes between), each held to eight seconds and faded
      - a whole piano decoded would be well over a hundred megabytes. An
      instrument once decoded is kept for later tracks. */
+  /* what went wrong fetching the instruments, kept for the page to ask
+     (diagnostics()) and told to the console once each: a name with no
+     manifest entry, a download that failed, a file that would not decode */
+  const diag = [], told = new Set();
+  function report(kind, name, detail) {
+    diag.push({ kind, name, detail: detail || '', at: Date.now() });
+    if (diag.length > 60) diag.shift();
+    if (!told.has(kind + name) && window.console) { told.add(kind + name); console.warn('[vinyl-player] ' + kind + ': ' + name + (detail ? ' (' + detail + ')' : '')); }
+  }
   const SAMPLE_DIR = near('vendor/tonejs-instruments/');
   const dirOf = (info) => (info.dir ? near('vendor/' + info.dir + '/') : SAMPLE_DIR);
   const decodedInst = new Map();
@@ -768,13 +777,15 @@ window.VinylPlayer.Generative = (() => {
      out of it where the manifest says they start */
   function instrument(name) {
     if (decodedInst.has(name)) { const p = decodedInst.get(name); decodedInst.delete(name); decodedInst.set(name, p); return p; }
-    const info = (window.TONE_SAMPLES || {})[name];
-    if (!info) return Promise.reject(new Error('no recordings of ' + name));
+    if (!window.TONE_SAMPLES) { report('no manifest loaded', name); return Promise.reject(new Error('no manifest')); }
+    const info = window.TONE_SAMPLES[name];
+    if (!info) { report('not in the manifest', name); return Promise.reject(new Error('no recordings of ' + name)); }
     const dec = new OfflineAudioContext(1, 1, SR);
     if (sampleWatch) sampleWatch(0, info.notes.length);
     const p = fetch(dirOf(info) + info.file)
-      .then((r) => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
-      .then((ab) => dec.decodeAudioData(ab))
+      .then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); }, (e) => { throw new Error('network: ' + (e && e.message)); })
+      .catch((e) => { report('download failed', name, e.message); throw e; })
+      .then((ab) => dec.decodeAudioData(ab).catch((e) => { report('decode failed', name, e && e.message); throw e; }))
       .then((buf) => {
         const src = buf.getChannelData(0), out = {}, near = Math.round(SR * 0.06);
         info.notes.forEach((n, i) => {
@@ -997,6 +1008,8 @@ window.VinylPlayer.Generative = (() => {
     }))).then((K) => {
     let E = K.E;
     const SM = K.SM;
+    /* what each part was meant to be and what it is (its recordings, or the synth standing in), for the page and the tests */
+    const resolved = {};
     /* a drummer's kit (VCSL) in place of the machine's: each drum brought to
        the level of the sound it stands in for, the middle tom the high one
        tuned down; the kick still has the machine's under it, for the floor */
@@ -1176,8 +1189,26 @@ window.VinylPlayer.Generative = (() => {
         let k = 0;
         return {
           connect(d) { v.forEach((x) => x.connect(d)); return this; },
+          chain(...nodes) { this.connect(nodes[0]); for (let i = 1; i < nodes.length; i++) nodes[i - 1].connect(nodes[i]); return this; },
           triggerAttackRelease(notes, dur, t, vel) {
             (Array.isArray(notes) ? notes : [notes]).forEach((f) => { v[k].triggerAttackRelease(f, dur, t, vel); k = (k + 1) % n; });
+          }
+        };
+      };
+      /* plucked strings: Tone's PluckSynth (15.1) takes no velocity, so each
+         voice goes through a gain of its own, set as it is plucked */
+      const plucks = (opts, n) => {
+        const v = Array.from({ length: n }, () => { const s = new T.PluckSynth(opts), g = new T.Gain(1); s.connect(g); return { s, g }; });
+        let k = 0;
+        return {
+          connect(d) { v.forEach((x) => x.g.connect(d)); return this; },
+          chain(...nodes) { this.connect(nodes[0]); for (let i = 1; i < nodes.length; i++) nodes[i - 1].connect(nodes[i]); return this; },
+          triggerAttackRelease(notes, dur, t, vel) {
+            (Array.isArray(notes) ? notes : [notes]).forEach((f) => {
+              const x = v[k]; k = (k + 1) % n;
+              x.g.gain.setValueAtTime(vel == null ? 1 : Math.max(0, vel), t);
+              x.s.triggerAttack(f, t);
+            });
           }
         };
       };
@@ -1213,14 +1244,23 @@ window.VinylPlayer.Generative = (() => {
         v.depth.setValueAtTime(0, t);
         if (dur > 0.3) v.depth.linearRampToValueAtTime(0.1, t + Math.min(0.5, dur * 0.6));
       }
-      const SYNTH_LEADS = { pluck: 1, supersaw: 1, bell: 1, acid: 1, organ: 1, keys: 1, sawlead: 1, squarelead: 1 };   // these names are synth voices first
-      function makeLead(lv) {
-        if (SAMPLED[lv] && !SYNTH_LEADS[lv]) {
+      const SYNTH_LEADS = { pluck: 1, supersaw: 1, bell: 1, acid: 1, keys: 1, sawlead: 1, squarelead: 1 };   // these names are synth voices first
+      /* a recorded lead whose recordings did not come: the synth of its own
+         family, not one voice for all (a wind by a breathy sine, a bow by a
+         soft saw, a mallet or a bell by the FM bell) */
+      const LEAD_FALL = { wind: 'flute', bowed: 'sawlead', keys: 'keys', pluck: 'pluck', strum: 'pluck', chop: 'pluck', stab: 'brass', ring: 'bell', figure: 'bell', bass: 'pluck' };
+      function makeLead(lv, role, synthOnly) {
+        if (!synthOnly && SAMPLED[lv] && !SYNTH_LEADS[lv]) {
           /* a player's breath and bow: winds swell into a note, strings lean
              into it, and a held note opens into vibrato a moment after it starts */
           const fam = SAMPLED[lv].fam, breathes = fam === 'wind' || fam === 'bowed';
           const sm = sampler(lv, { release: 0.5, attack: fam === 'bowed' ? 0.09 : fam === 'wind' ? 0.03 : 0 });
-          if (!sm) return makeLead('pluck');            // its recordings did not load: a synth voice instead
+          if (!sm) {
+            const fb = lv === 'organ' ? 'organ' : LEAD_FALL[SAMPLED[lv].fam] || 'pluck';
+            if (role) resolved[role] = { want: lv, played: 'synth:' + fb, source: 'synth', reason: 'recordings did not load' };
+            return makeLead(lv === 'organ' ? 'organ-synth' : fb, null, true);
+          }
+          if (role) resolved[role] = { want: lv, played: lv, source: (window.TONE_SAMPLES[srcOf(lv)] || {}).dir || 'tonejs-instruments' };
           const vib = breathes ? sync(new T.Vibrato({ frequency: 5.2, depth: 0, wet: 1 }), 5.2) : null;
           sm.chain(...fxOf(lv), ...(vib ? [vib] : []), keys);
           const k = SAMPLED[lv].oct / 2;                 // a lead line sits an octave or so under the synth leads
@@ -1230,8 +1270,17 @@ window.VinylPlayer.Generative = (() => {
             sm.triggerAttackRelease(f0 * k, d, t, Math.min(1, g / 0.04));
           };
         }
+        if (role && !resolved[role]) resolved[role] = { want: lv, played: lv, source: 'synth' };
         if (lv === 'keys') return (t, f0, g, dur) => rhodes.triggerAttackRelease(f0, Math.max(dur, 0.6), t, Math.min(1, (g / 0.04) * 0.8));
-        const syn = lv === 'pluck' ? new T.PluckSynth({ attackNoise: 1.2, dampening: 4200, resonance: 0.92, volume: -6 })
+        const syn = lv === 'pluck' ? plucks({ attackNoise: 1.2, dampening: 4200, resonance: 0.92, volume: -6 }, 3)
+          /* the organ without its recordings: drawbars (a fundamental, the octave and twelfth), a slow rotor */
+          : lv === 'organ-synth' ? pool(() => new T.Synth({ oscillator: { type: 'custom', partials: [1, 0.7, 0.45, 0, 0.25, 0, 0, 0.12] }, envelope: { attack: 0.01, decay: 0.05, sustain: 0.9, release: 0.12 }, volume: -20 }), 4)
+          /* a flute's breath: a sine, a little air, vibrato late */
+          : lv === 'flute' ? pool(() => new T.Synth({ oscillator: { type: 'custom', partials: [1, 0.12, 0.05] }, envelope: { attack: 0.06, decay: 0.2, sustain: 0.8, release: 0.25 }, volume: -16 }), 3)
+          /* brass: a saw opening through its filter as it is blown */
+          : lv === 'brass' ? pool(() => new T.MonoSynth({ oscillator: { type: 'sawtooth' }, filter: { type: 'lowpass', Q: 2, rolloff: -24 },
+              filterEnvelope: { attack: 0.04, decay: 0.25, sustain: 0.4, release: 0.2, baseFrequency: 350, octaves: 3 },
+              envelope: { attack: 0.03, decay: 0.2, sustain: 0.6, release: 0.2 }, volume: -18 }), 4)
           : lv === 'supersaw' ? pool(() => new T.Synth({ oscillator: { type: 'fatsawtooth', count: 5, spread: 40 }, envelope: { attack: 0.004, decay: 0.2, sustain: 0.3, release: 0.15 }, volume: -22 }), 4)
           : lv === 'bell' ? pool(() => new T.FMSynth({ harmonicity: 3.5, modulationIndex: 12, envelope: { attack: 0.002, decay: 0.9, sustain: 0, release: 0.6 },
               modulationEnvelope: { attack: 0.002, decay: 0.4, sustain: 0, release: 0.4 }, volume: -16 }), 4)
@@ -1249,20 +1298,24 @@ window.VinylPlayer.Generative = (() => {
               filterEnvelope: { attack: 0.003, decay: 0.18, sustain: 0.1, release: 0.1, baseFrequency: 260, octaves: 3.4 },
               envelope: { attack: 0.003, decay: 0.15, sustain: 0.5, release: 0.05 }, volume: -16 })
           : pool(() => new T.Synth({ oscillator: { type: 'custom', partials: [1, 0.45, 0.2, 0.1] }, envelope: { attack: 0.005, decay: 0.1, sustain: 0.8, release: 0.08 }, volume: -18 }), 4);
-        const vib = lv === 'sawlead' || lv === 'squarelead' ? sync(new T.Vibrato({ frequency: 5.5, depth: 0, wet: 1 }), 5.5) : null;
+        const vib = lv === 'sawlead' || lv === 'squarelead' || lv === 'flute' ? sync(new T.Vibrato({ frequency: 5.5, depth: 0, wet: 1 }), 5.5) : null;
         if (lv === 'supersaw') syn.connect(new T.Filter({ type: 'lowpass', frequency: 3200 }).connect(keys));
         else if (vib) syn.chain(vib, keys);
         else syn.connect(keys);
         return (t, f0, g, dur, accent) => {
           const v = Math.min(1, (g / 0.04) * (accent ? 1.15 : 1));
           if (lv === 'acid') syn.triggerAttackRelease(f0 / 2, dur, t, accent ? 1 : v * 0.75);
-          else if (lv === 'pluck') syn.triggerAttack(f0, t);
+          else if (lv === 'pluck') syn.triggerAttackRelease(f0, dur, t, v);
+          else if (lv === 'flute') { const d = Math.max(dur, STEP * 1.6); vibrato(vib, t, d); syn.triggerAttackRelease(f0 / 2, d, t, v); }
+          else if (lv === 'organ-synth' || lv === 'brass') syn.triggerAttackRelease(f0 / 2, dur, t, v);
           else if (vib) { const d = Math.max(dur, STEP * 1.6); vibrato(vib, t, d); syn.triggerAttackRelease(f0 / 2, d, t, v); }
           else syn.triggerAttackRelease(f0, lv === 'bell' ? Math.max(dur, 0.5) : dur, t, v);
         };
       }
-      const lead1 = makeLead(tr.leadVoice);
-      const lead2 = tr.lead2 && tr.lead2 !== tr.leadVoice ? makeLead(tr.lead2) : lead1;
+      const bassPlayerOk = !tr.realBass || !!SM[srcOf(tr.realBass)];
+      if (tr.realBass) resolved.bass = { want: tr.realBass, played: bassPlayerOk ? tr.realBass : 'synth bass', source: bassPlayerOk ? 'tonejs-instruments' : 'synth', reason: bassPlayerOk ? undefined : 'recordings did not load' };
+      const lead1 = makeLead(tr.leadVoice, 'lead');
+      const lead2 = tr.lead2 && tr.lead2 !== tr.leadVoice ? makeLead(tr.lead2, 'lead2') : lead1;
       let lead = lead1;                                  // which one plays, set per bar
 
       /* ---- the counter-melody: a second instrument with a part of its own ---- */
@@ -1272,6 +1325,8 @@ window.VinylPlayer.Generative = (() => {
         ? ({ ring: 'vibes', figure: 'kalimba', pluck: 'marimba', keys: 'piano', chop: 'guitar', strum: 'guitar' }[SAMPLED[tr.counter].fam] || 'flute')
         : tr.counter;
       const realCv = SAMPLED[cv] && SM[srcOf(cv)];
+      if (tr.counter) resolved.counter = { want: tr.counter, played: cv, source: realCv ? (window.TONE_SAMPLES[srcOf(cv)] || {}).dir || 'tonejs-instruments' : 'synth',
+        reason: cv !== tr.counter ? 'recordings did not load' : undefined };
       const formant = (f1, f2, f3) => {
         /* a voice's vowel: three resonances over a buzzing source */
         const inp = new T.Gain(1), sum = new T.Gain(1).connect(keys);
@@ -1304,7 +1359,7 @@ window.VinylPlayer.Generative = (() => {
         : cv === 'kalimba' ? pool(() => new T.FMSynth({ harmonicity: 5.4, modulationIndex: 3, oscillator: { type: 'sine' },
             envelope: { attack: 0.001, decay: 0.8, sustain: 0, release: 0.4 },
             modulationEnvelope: { attack: 0.001, decay: 0.06, sustain: 0, release: 0.1 }, volume: -12 }), 4).connect(keys)
-        : cv === 'guitar' ? pool(() => new T.PluckSynth({ attackNoise: 0.8, dampening: 2600, resonance: 0.82, volume: -8 }), 4).connect(keys)
+        : cv === 'guitar' ? plucks({ attackNoise: 0.8, dampening: 2600, resonance: 0.82, volume: -8 }, 4).connect(keys)
         : cv === 'wurli' ? wurliVoice()
         : cv === 'clav' ? pool(() => new T.Synth({ oscillator: { type: 'pulse', width: 0.18 }, envelope: { attack: 0.001, decay: 0.16, sustain: 0.04, release: 0.05 }, volume: -21 }), 6)
             .connect(new T.Filter({ type: 'highpass', frequency: 320, Q: 0.8 }).connect(new T.AutoWah({ baseFrequency: 400, octaves: 3, sensitivity: -32, Q: 2, wet: 0.6 }).connect(keys)))
@@ -1921,6 +1976,7 @@ window.VinylPlayer.Generative = (() => {
         }
       }
 
+      if (!tr.resolved) tr.resolved = resolved;          // (the first segment rendered says; every one resolves alike)
       play = playStep;
     }
     const writeBar = (k) => {
@@ -2408,6 +2464,8 @@ window.VinylPlayer.Generative = (() => {
     warm(name) { setStyle(name); press(belt); },
     flip,
     prepareB: () => { pressB(); },
+    /* what failed to load (development): [{ kind, name, detail, at }] */
+    diagnostics: () => diag.slice(),
     set onchange(fn) { onchange = fn; },
     /* the preloader's ear: told (done, more) as instrument notes are fetched */
     set onsamples(fn) { sampleWatch = fn; },
