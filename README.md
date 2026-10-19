@@ -73,7 +73,10 @@ A file from another origin needs CORS headers.
 The engine's extras:
 
 - `styles`: a list of `[key, label]` pairs.
-- `style(key)`: makes every new record in that style.
+- `style(key)`: makes every record pressed from now on in that style (`''` goes back to the shuffle). It does not replace the record already playing; a waiting record of another style is discarded. The soon page always shuffles, so it sets `''` when START is pressed.
+- `edit(mode)`: progressive house is full length by default (6–8.5 minutes, about 192–256 bars, at either speed). `edit('short')` gives the old short edit for records pressed from then on; `edit('full')` goes back.
+- `diagnostics()`: what failed to load: a missing manifest entry, a failed download or a file that would not decode, as `{ kind, name, detail, at }`. Each failure is also reported once in the console.
+- `track.resolved`: for the record playing, each part's chosen instrument, what actually played, and where it came from (`tonejs-instruments`, `vcsl` or `synth`), with the reason when a fallback stood in.
 - `warm(key)`: presses the first half of a record ahead of time.
 - `prefetch(key)`: fetches that style's instruments into the browser cache.
 - `like()`: the LIKE key calls this, so later records lean towards the liked one.
@@ -169,6 +172,16 @@ The element sizes itself from its own width, so to make it bigger or smaller, gi
 - **The generative engine renders with Tone.js.** Tone loads its own worklet processors as `blob:` scripts and fetches them first, so the page needs `blob:` in both `script-src` and `connect-src`.
 - **`engine/no-blob-workers.js` quiets Tone's clock Worker.** Tone tries to start it from a `blob:` URL; this file refuses that before Tone loads, so a strict policy logs no error and Tone falls back to its timer clock.
 - **The melody model is TensorFlow.js.** It is loaded only once the first record is playing.
+
+## How the engine composes
+
+- **Each style has a profile.** It sets the lead voices and the motif's length (two or four bars). It also sets the rhythms, density, contour, range, note lengths, counter-melody shape, keyboard comp, bass lines and chord voicing. So Chicago riffs short over a jacking bass, and deep house plays long, sparse keys in open voicings. Trance holds long notes, minimal plays blips, tech house leads with a written bass hook, and acid's 303 slides and accents.
+- **Each record has one theme.** The motif returns, and a drop tells it in phrases that develop: its question, an altered ending, the motif a step late, another register, then the close. A later drop starts from the developed versions. Arpeggios, counter-melodies and comps are phrase-length patterns with variations.
+- **Each build has one concept, weighted by style:** bass, melodic, percussive, chord-driven or stripped. It runs through five stages; for 32 bars these are tease, develop, urgency, focus and set-up.
+  - There is one main transition effect and at most one supporting effect, and often none.
+  - The breath before the drop is either true silence (the reverb and echo returns are cut too) or keeps one effect's tail.
+  - The drop opens with a crash, a boom, an impact, a crash with an impact, or a clean cut, then pays off the concept.
+- **The next record is chosen against the last four.** It avoids the same lead family, motif rhythm, contour, progression, build concepts and style. The key is not penalised.
 
 ## Phones
 

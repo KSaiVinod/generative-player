@@ -413,8 +413,9 @@ window.VinylPlayer.Generative = (() => {
       ['drop', pick([32, 32, 48])], ['breakdown', 16], ['build', pick([16, 32, 32])], ['drop', pick([32, 48])], ['outro', pick([16, 16, 32])]];
     /* never every maximum: the longest optional sections give way until it fits, and it is lengthened if short */
     const total = () => a.reduce((n, x) => n + x[1], 0);
-    const shrink = [1, 4, 7, 0, 8, 2, 6];
-    for (let i = 0; total() > hi && i < 40; i++) { const k = shrink[i % shrink.length]; if (a[k][1] > 16 && !(a[k][0] === 'build' && a[k][1] <= 16)) a[k][1] -= 16; }
+    /* (each section's floor: intro 16, groove 32, breakdowns 16, the main build 32, drops 32, the second build 16, outro 16) */
+    const floor = [16, 32, 16, 32, 32, 16, 16, 32, 16], shrink = [2, 8, 0, 6, 4, 7, 1];
+    for (let i = 0; total() > hi && i < 40; i++) { const k = shrink[i % shrink.length]; if (a[k][1] - 16 >= floor[k]) a[k][1] -= 16; }
     for (let i = 0; total() < lo && i < 10; i++) a[[1, 4, 7][i % 3]][1] += 16;
     return a;
   }
