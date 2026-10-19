@@ -181,6 +181,10 @@ The element sizes itself from its own width, so to make it bigger or smaller, gi
   - There is one main transition effect and at most one supporting effect, and often none.
   - The breath before the drop is either true silence (the reverb and echo returns are cut too) or keeps one effect's tail.
   - The drop opens with a crash, a boom, an impact, a crash with an impact, or a clean cut, then pays off the concept.
+- **Progressive house is made like an organic progressive record, from recordings only.**
+  - **Sources:** strings, harmonium or organ become the pads; a harp, marimba, piano or đàn tranh plays the arpeggio through a filter that snaps on each note; the acoustic kick sits over a timpani tuned far down for sub; a violin, cello or horn section, or vibraphone with piano, carries the hook.
+  - **Production:** it has its own renderer at 44.1 kHz, with smooth filter curves across the whole arrangement, each part ducking under the kick by its own amount, a hall, a room and an echo, and a look-ahead limiter.
+  - **Variety:** each record picks its own recordings for every part.
 - **The next record is chosen against the last four.** It avoids the same lead family, motif rhythm, contour, progression, build concepts and style. The key is not penalised.
 
 ## Phones
