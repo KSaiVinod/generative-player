@@ -26,7 +26,7 @@
     opts = opts || {};
     const rec = opts.rpm === 45 ? 45 : 33;
     const track = { rpm: rec, title: opts.title || (typeof input === 'string' ? decodeURIComponent(input.split('/').pop()) : (input && input.name) || '') };
-    let ctx = null, out = null, analyser = null, node = null, ready = null, clickOut = null, clickNoise = null;
+    let ctx = null, out = null, analyser = null, node = null, ready = null, clickOut = null, clickNoise = null, bg = null;
     let decoded = null;
     const id = ++n;
     let playing = false, holding = false, lifted = false, vol = 0.7, belt = 33, pos = 0, token = 0;
@@ -40,6 +40,8 @@
       analyser.minDecibels = -100; analyser.maxDecibels = -24;
       out.connect(analyser);
       clickOut = ctx.createGain(); clickOut.gain.value = 0.5; clickOut.connect(ctx.destination);
+      /* on a phone, played on with the screen off (vinyl-player.js) */
+      bg = window.VinylPlayer && window.VinylPlayer.background ? window.VinylPlayer.background(ctx, [out, clickOut]) : null;
       clickNoise = ctx.createBuffer(1, Math.round(ctx.sampleRate / 4), ctx.sampleRate);
       const cd = clickNoise.getChannelData(0);
       for (let i = 0; i < cd.length; i++) cd[i] = Math.random() * 2 - 1;
@@ -90,6 +92,7 @@
 
     async function start(delay, at) {
       setup();
+      if (bg) bg.play();
       if (ctx.state === 'suspended') { try { await ctx.resume(); } catch (e) { /* stays silent */ } }
       if (playing) return;
       playing = true; holding = false;
@@ -109,6 +112,7 @@
     function stop() {
       if (!ctx || !playing) return;
       playing = false; holding = false;
+      if (bg) bg.pause();
       const t = ++token;
       rateTo(0, 0.3);
       setTimeout(() => { if (t === token && node) node.port.postMessage({ type: 'clear' }); }, 2500);

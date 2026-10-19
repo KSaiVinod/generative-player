@@ -310,3 +310,24 @@ vinyl-player.is-win .vp-key--start::after,vinyl-player.is-win .vp-rpmtag{font-si
   .vp-arm,.vp-key,.vp-fader input::-webkit-slider-thumb{transition:none;}
   .vp-key:active,.vp-key.is-down{transform:none;}
 }
+
+/* ── a phone turned on its side (the portrait attribute): the deck is made
+   to stand up, so a card asks for the phone back upright; the record plays on ── */
+.vp-turn{display:none;}
+@media (orientation:landscape) and (max-height:500px) and (pointer:coarse){
+  .vp-turn{
+    display:flex;position:fixed;inset:0;z-index:2147483000;
+    flex-direction:column;align-items:center;justify-content:center;gap:18px;
+    padding:max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));
+    background:#0A0A0C;color:var(--vp-cream);text-align:center;
+  }
+  html:has(.vp-turn){overflow:hidden;}
+}
+.vp-turn__phone{width:46px;height:78px;border:2px solid var(--vp-cream);border-radius:10px;position:relative;
+  transform:rotate(-90deg);animation:vp-turn 2.4s var(--vp-ease) infinite;}
+.vp-turn__phone::after{content:"";position:absolute;left:50%;top:50%;width:30px;height:30px;margin:-15px 0 0 -15px;border-radius:50%;
+  background:radial-gradient(circle,var(--vp-accent) 0 16%,#111 17% 100%);box-shadow:0 0 0 1px #2a272c;}
+.vp-turn__title{margin:0;font-family:var(--vp-display);font-size:1.35rem;font-weight:600;}
+.vp-turn__sub{margin:0;font-family:var(--vp-mono);font-size:.62rem;letter-spacing:.18em;text-transform:uppercase;color:var(--vp-dim);}
+@keyframes vp-turn{0%,20%{transform:rotate(-90deg);}55%,100%{transform:rotate(0deg);}}
+@media (prefers-reduced-motion:reduce){.vp-turn__phone{animation:none;transform:none;}}

@@ -24,7 +24,11 @@
    volume (0-10), layout (auto | wide | stacked), model (the line
    engraved on the plinth), label-top / label-title / label-sub, hint,
    storage (a localStorage prefix: the speed and the volume remembered),
-   analog ("off" to go without the analog layer even when it is loaded).
+   analog ("off" to go without the analog layer even when it is loaded),
+   portrait (a phone on its side is asked to turn back upright),
+   media-artist / media-album / media-art (the lock screen's lines and
+   picture; the title is the track's). On a phone the record plays on with
+   the screen locked or the page in the background.
    Children with slot="label" are put on the record's label.
 
    Events (bubbling): vp-play, vp-stop, vp-end, vp-change (detail: the
@@ -62,6 +66,65 @@
       }
     }
     hapticFn(ms);
+  }
+
+  /* ── playing on with the screen off (phones) ──────────────────────────
+     A phone silences a page's sound when it goes to the background or the
+     screen locks, unless the page is playing media. So on a touch screen a
+     source's output also feeds a stream into a hidden <audio>, started from
+     the same tap as the record: in view the sound goes out directly (no
+     added delay under a scratching hand); out of view the stream carries
+     it. iOS 17+ is told this is playback, so the silent switch leaves it be.
+     A source calls VinylPlayer.background(ctx, [its outputs]) once it has a
+     context, then .play() and .pause() with the record. */
+  const coarse = window.matchMedia('(pointer: coarse)');
+  function background(ctx, nodes) {
+    if (!coarse.matches || !ctx.createMediaStreamDestination || !window.MediaStream) return null;
+    try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) { /* older iOS */ }
+    const dest = ctx.createMediaStreamDestination(), direct = ctx.createGain(), carried = ctx.createGain();
+    direct.connect(ctx.destination); carried.connect(dest);
+    nodes.forEach((n) => { try { n.disconnect(ctx.destination); } catch (e) { /* was not */ } n.connect(direct); n.connect(carried); });
+    const el = document.createElement('audio');
+    el.setAttribute('playsinline', ''); el.setAttribute('aria-hidden', 'true'); el.hidden = true;
+    el.srcObject = dest.stream;
+    document.body.appendChild(el);
+    let wanted = false;
+    const wake = () => { if (wanted && ctx.state !== 'running' && ctx.state !== 'closed') ctx.resume().catch(() => {}); };
+    const route = () => {
+      const away = document.hidden, t = ctx.currentTime;
+      direct.gain.setTargetAtTime(away ? 0 : 1, t, 0.02);
+      carried.gain.setTargetAtTime(away ? 1 : 0, t, 0.02);
+      wake();
+    };
+    carried.gain.value = 0; route();
+    document.addEventListener('visibilitychange', route);
+    ctx.addEventListener('statechange', wake);            // a call or Siri over: back on
+    return {
+      play() { wanted = true; const p = el.play(); if (p && p.catch) p.catch(() => {}); },
+      pause() { wanted = false; el.pause(); }
+    };
+  }
+  VP.background = background;
+
+  /* the lock screen and the notification shade: what is on, and play/pause */
+  const MS = navigator.mediaSession;
+  function mediaMeta(el, tr) {
+    if (!MS || !window.MediaMetadata) return;
+    const icon = document.querySelector('link[rel="apple-touch-icon"]');
+    const art = el.getAttribute('media-art') || (icon && icon.href);
+    const named = tr && (tr.title || (tr.label && tr.label.charAt(0).toUpperCase() + tr.label.slice(1) + (tr.side === 'b' ? ' \u00b7 Side B' : '')));
+    const title = named || el.getAttribute('label-title') || document.title;
+    try {
+      MS.metadata = new MediaMetadata({ title, artist: el.getAttribute('media-artist') || el.getAttribute('label-top') || '',
+        album: el.getAttribute('media-album') || '', artwork: art ? [{ src: art, sizes: '180x180', type: 'image/png' }] : [] });
+    } catch (e) { /* none */ }
+  }
+  function mediaOwn(el) {
+    if (!MS) return;
+    const on = (a, fn) => { try { MS.setActionHandler(a, fn); } catch (e) { /* not this one */ } };
+    on('play', () => el.play());
+    on('pause', () => el.stop());
+    on('stop', () => el.stop());
   }
 
   let uid = 0;
@@ -190,6 +253,13 @@
 
     connectedCallback() {
       if (!this._built) this._build();
+      /* portrait: a phone on its side gets a card asking for it upright (vinyl-player.css) */
+      if (this.hasAttribute('portrait') && !document.querySelector('.vp-turn')) {
+        const c = document.createElement('div');
+        c.className = 'vp-turn'; c.setAttribute('role', 'status');
+        c.innerHTML = '<span class="vp-turn__phone" aria-hidden="true"></span><p class="vp-turn__title">Turn your phone upright</p><p class="vp-turn__sub">The record plays on</p>';
+        document.body.appendChild(c);
+      }
       this._ro = new ResizeObserver(() => this._layout());
       this._ro.observe(this);
       this._layout();
@@ -239,6 +309,7 @@
       this.classList.toggle('is-45', single);
       if (this._parts.rpmtag) this._parts.rpmtag.textContent = single ? '45' : '33⅓';
       if (this._parts.like) this._parts.like.setAttribute('aria-pressed', 'false');     // a new record: not liked yet
+      if (this._playing) mediaMeta(this, tr);
       this._emit('vp-change', tr);
     }
 
@@ -424,6 +495,8 @@
           this._followIn(landing * 1000 + 200);
           if (A) { try { await A.unlock(); await A.start(); setTimeout(() => A.needleDrop(), landing * 1000 - 100); } catch (e) { /* none */ } }
         }
+        mediaOwn(this); mediaMeta(this, src.track);
+        if (MS) MS.playbackState = 'playing';
         this._emit('vp-play', { from: from || 0 });
         this._eqWake();
       } finally { this._busy = false; }
@@ -439,6 +512,7 @@
       this._parts.arm.classList.remove('is-tracking');
       this._armTo(0, true);
       this._spinOn();                                   // the platter coasts down with the brake
+      if (MS) MS.playbackState = 'paused';
       this._emit('vp-stop');
     }
     toggle() { return this._playing ? this.stop() : this.play(); }

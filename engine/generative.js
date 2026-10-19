@@ -1909,7 +1909,7 @@ window.VinylPlayer.Generative = (() => {
   }
 
   /* ---- the deck ---------------------------------------------------------- */
-  let ctx = null, node = null, out = null, clickOut = null, clickNoise = null, ready = null, analyser = null;
+  let ctx = null, node = null, out = null, clickOut = null, clickNoise = null, ready = null, analyser = null, bg = null;
   let playing = false, holding = false, lifted = false;
   let belt = 33, vol = 0.7, pos = 0, cur = null, token = 0;
   /* the speed to read a record at: the belt's over the record's own */
@@ -1929,6 +1929,8 @@ window.VinylPlayer.Generative = (() => {
     analyser.minDecibels = -100; analyser.maxDecibels = -24;
     out.connect(analyser);
     clickOut = ctx.createGain(); clickOut.gain.value = 0.5; clickOut.connect(ctx.destination);
+    /* on a phone, played on with the screen off (vinyl-player.js) */
+    bg = window.VinylPlayer && window.VinylPlayer.background ? window.VinylPlayer.background(ctx, [out, clickOut]) : null;
     clickNoise = ctx.createBuffer(1, Math.round(ctx.sampleRate / 4), ctx.sampleRate);
     const cd = clickNoise.getChannelData(0);
     for (let i = 0; i < cd.length; i++) cd[i] = Math.random() * 2 - 1;
@@ -2225,6 +2227,7 @@ window.VinylPlayer.Generative = (() => {
 
   async function start(delay, at) {
     setup();
+    if (bg) bg.play();
     if (ctx.state === 'suspended') { try { await ctx.resume(); } catch (e) { /* stays silent */ } }
     if (playing) return;
     playing = true; holding = false;
@@ -2259,6 +2262,7 @@ window.VinylPlayer.Generative = (() => {
      hand, and the B-side goes on from its first groove */
   async function flip() {
     setup();
+    if (bg) bg.play();
     if (ctx.state === 'suspended') { try { await ctx.resume(); } catch (e) { /* stays silent */ } }
     const t = ++token;
     rateTo(0, 0.12);
@@ -2280,6 +2284,7 @@ window.VinylPlayer.Generative = (() => {
   function stop() {
     if (!ctx || !playing) return;
     playing = false; holding = false;
+    if (bg) bg.pause();
     const t = ++token;
     rateTo(0, 0.3);
     setTimeout(() => { if (t === token) { post({ type: 'clear' }); clearDeck(); } }, 2500);
