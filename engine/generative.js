@@ -854,6 +854,7 @@ window.VinylPlayer.Generative = (() => {
       let breath = weighted(C.breath);
       /* (an effect that swells into the downbeat cannot sit in a full pause: that breath keeps its tail) */
       if (breath === 'pause' && (TAIL_FX[principal] || TAIL_FX[support])) breath = 'tail';
+      if (breath === 'tail' && !TAIL_FX[principal] && !TAIL_FX[support]) breath = 'pause';      // (nothing to ring: that is a pause)
       return { concept, principal, support, breath, breathLen: qpick(['eighth', 'beat', 'beat', 'half']),
         hit: weighted(C.hit), riserBars: qpick([4, 8, 8]), fills: q() < 0.5 };
     });
@@ -1558,11 +1559,11 @@ window.VinylPlayer.Generative = (() => {
           const vib = breathes ? sync(new T.Vibrato({ frequency: 5.2, depth: 0, wet: 1 }), 5.2) : null;
           sm.chain(...fxOf(lv), ...(vib ? [vib] : []), keys);
           const k = SAMPLED[lv].oct / 2;                 // a lead line sits an octave or so under the synth leads
-          return (t, f0, g, dur) => {
+          return Object.assign((t, f0, g, dur) => {
             const d = Math.max(dur, STEP * 2);
             if (vib) vibrato(vib, t, d);
             sm.triggerAttackRelease(f0 * k, d, t, Math.min(1, g / 0.04));
-          };
+          }, { mul: k });
         }
         if (role && !resolved[role]) resolved[role] = { want: lv, played: lv, source: 'synth' };
         if (lv === 'keys') return (t, f0, g, dur) => rhodes.triggerAttackRelease(f0, Math.max(dur, 0.6), t, Math.min(1, (g / 0.04) * 0.8));
@@ -1602,7 +1603,8 @@ window.VinylPlayer.Generative = (() => {
         else if (lv === 'vox') syn.connect(vowel(570, 840, 2410));
         else if (vib) syn.chain(vib, keys);
         else syn.connect(keys);
-        return (t, f0, g, dur, accent, slide) => {
+        const HALF = { acid: 1, blip: 1, vox: 1, flute: 1, 'organ-synth': 1, brass: 1 };
+        return Object.assign((t, f0, g, dur, accent, slide) => {
           const v = Math.min(1, (g / 0.04) * (accent ? 1.15 : 1));
           if (lv === 'acid') {
             /* the 303: a slide glides into its note, an accent opens the filter wider; the cutoff wanders over sixteen bars */
@@ -1618,13 +1620,13 @@ window.VinylPlayer.Generative = (() => {
           else if (lv === 'organ-synth' || lv === 'brass') syn.triggerAttackRelease(f0 / 2, dur, t, v);
           else if (vib) { const d = Math.max(dur, STEP * 1.6); vibrato(vib, t, d); syn.triggerAttackRelease(f0 / 2, d, t, v); }
           else syn.triggerAttackRelease(f0, lv === 'bell' ? Math.max(dur, 0.5) : dur, t, v);
-        };
+        }, { mul: HALF[lv] || vib ? 0.5 : 1 });
       }
       const bassPlayerOk = !tr.realBass || !!SM[srcOf(tr.realBass)];
       if (tr.realBass) resolved.bass = { want: tr.realBass, played: bassPlayerOk ? tr.realBass : 'synth bass', source: bassPlayerOk ? 'tonejs-instruments' : 'synth', reason: bassPlayerOk ? undefined : 'recordings did not load' };
       /* (tests only: with tr.log an array, every note played is written down - bar, step, part, pitch, level, length) */
       const LOG = Array.isArray(tr.log) ? tr.log : null;
-      const logged = (part, fn) => (LOG ? (t, f0, g, dur, ...x) => { LOG.push({ bar: curBar, t: +(t + off).toFixed(3), part, f: Math.round(f0), g: +g.toFixed(4), dur: +dur.toFixed(3) }); return fn(t, f0, g, dur, ...x); } : fn);
+      const logged = (part, fn) => (LOG ? (t, f0, g, dur, ...x) => { LOG.push({ bar: curBar, t: +(t + off).toFixed(3), part, f: Math.round(f0 * (fn.mul || 1)), g: +g.toFixed(4), dur: +dur.toFixed(3) }); return fn(t, f0, g, dur, ...x); } : fn);
       const lead1 = logged('lead', makeLead(tr.leadVoice, 'lead'));
       const lead2 = tr.lead2 && tr.lead2 !== tr.leadVoice ? logged('lead2', makeLead(tr.lead2, 'lead2')) : lead1;
       let lead = lead1;                                  // which one plays, set per bar
@@ -2117,7 +2119,7 @@ window.VinylPlayer.Generative = (() => {
       /* the hook's first notes only (a teaser): the rest of it rests */
       const fragOf = (phrase, n) => { let c = 0, on = true; return phrase.map((v) => { if (typeof v === 'number') on = ++c <= n; return on ? v : null; }); };
       /* a chord voiced open: the lowest note down, the others spread up */
-      const openOf = (c) => Object.assign({}, c, { notes: c.notes.map((h, k) => (k === 0 ? h / 2 : k % 2 ? h * 2 : h)) });
+      const openOf = (c) => Object.assign({}, c, { notes: c.notes.map((h, k) => (k % 2 ? h * 2 : h)) });
       function buildBar(M, stg, t, s16, sub, ch, barIndex, sec, rise, vel, last) {
         const c = M.concept, hook = tr.mel.hook, slot = (sec.bar % ML) * 8;
         const roll = (every, g0, g1) => { if (s16 % every === 0) snare(t, g0 + (g1 - g0) * rise, true); };
@@ -2253,9 +2255,15 @@ window.VinylPlayer.Generative = (() => {
           bassAt(t, s16, ch, 0.32 * vel, barIndex);
           chordsAt(t, s16, barIndex, ch, 0.7);
           if (!dance && tr.lead && sec.bar >= sec.len / 2) leadAt(t, s16, ch, 0.6, barIndex);
-          /* the hook, early and quiet, before the drop gives it everything */
-          const tease = dance && tr.lead && tr.tease && sec.n === 0 && sec.bar >= sec.len / 4;
-          if (tease) leadAt(t, s16, ch, 0.38, barIndex);
+          /* the hook, early and quiet, before the drop gives it everything. A
+             long groove (progressive) unfolds in eight-bar phrases instead:
+             the groove alone, the motif's first notes, the counter-melody in
+             its place, more of the motif, the beds, the whole hook */
+          const p8 = Math.floor(sec.bar / 8), longG = sec.len >= 24;
+          const tease = dance && tr.lead && tr.tease && sec.n === 0 && sec.bar >= sec.len / 4 && (!longG || p8 % 2 === 1);
+          if (tease && longG) melodyAt(t, s16, ch, 0.36, (sec.bar % ML) * 8, p8 >= 5 ? tr.mel.hook : fragOf(tr.mel.hook, p8 === 1 ? 3 : 6), lead);
+          else if (tease) leadAt(t, s16, ch, 0.38, barIndex);
+          if (longG && p8 >= 2 && p8 % 2 === 0) counterAt(t, s16, ch, 0.5, barIndex);
           const gon = (name) => layerOn(name, sec, sec.bar, true);
           if (gon('perc') || FAM === 'funk') layerAt(t, s16, 0.8 * vel, barIndex);
           if (tease && gon('resp')) respondAt(t, s16, ch, 0.7, (sec.bar % ML) * 8, tr.mel.hook);
@@ -2355,7 +2363,13 @@ window.VinylPlayer.Generative = (() => {
           const leadIn = !bassOnly && db >= dlen * D.leadIn, call = Math.floor(db / 2) % 2 === 0;
           const lift = D.lift && db >= dlen * D.lift ? 2 : 1;
           /* (a melodic build promised the hook: it comes, whole, whether or not the track leads with it elsewhere) */
-          if ((tr.lead || P === 'melodic') && (!dance || leadIn) && (D.type !== 'callresp' || call)) leadAt(t, s16, ch, db < dlen / 2 ? 0.8 : 1, barIndex, lift);
+          /* a long drop: in every third eight bars the lead
+             rests and the theme is stated by the other voice (with the counter
+             under it) - taking the lead away for a while is development too */
+          const rest8 = dance && sec.len >= 24 && Math.floor(db / 8) % 3 === 2;
+          if (rest8 && (tr.lead || P === 'melodic')) melodyAt(t, s16, ch, 0.75, (sec.bar % ML) * 8, phraseAt(sec), lead2 === lead1 ? lead1 : lead2);
+          if (rest8) counterAt(t, s16, ch, 0.7, barIndex);
+          else if ((tr.lead || P === 'melodic') && (!dance || leadIn) && (D.type !== 'callresp' || call)) leadAt(t, s16, ch, db < dlen / 2 ? 0.8 : 1, barIndex, lift);
           /* the downbeat: a crash and an impact, a crash, a boom, or just the kick; and a crash out of the gap */
           if (dance && s16 === 0) {
             if (db === 0) hitDown(D.hit, t);
@@ -2388,9 +2402,11 @@ window.VinylPlayer.Generative = (() => {
           const entry = (tr.entries || [])[sec.n] || 'none';
           if (sec.bar === 0 && s16 === 0 && entry === 'air') noise(t, BAR * 2, 0.22, 'bandpass', 6000, 1.1, 350);
           if (sec.bar === 0 && s16 === 0 && entry === 'boom') boom(t);
-          counterAt(t, s16, ch, 0.85, barIndex);
-          stringsAt(t, s16, ch, 1, barIndex); hornsAt(t, s16, ch, 0.9, barIndex);
-          woodAt(t, s16, ch, 0.9, barIndex); harmoniumAt(t, s16, ch, 0.65, barIndex);
+          /* (a long breakdown opens in steps: the counter alone over the chords, then the beds, then the hook) */
+          const pb = sec.len >= 24 ? Math.floor(sec.bar / 8) : 9;
+          if (pb !== 2) counterAt(t, s16, ch, 0.85, barIndex);
+          if (pb >= 1) { stringsAt(t, s16, ch, 1, barIndex); hornsAt(t, s16, ch, 0.9, barIndex); woodAt(t, s16, ch, 0.9, barIndex); }
+          harmoniumAt(t, s16, ch, 0.65, barIndex);
           if (sec.bar >= sec.len / 2) layerAt(t, s16, 0.45 * vel, barIndex);
           if (s16 === 0 && barIndex % tr.bpc === 0) {
             if (RH.keys) ch.notes.forEach((f0, k) => keysNote(t + k * 0.03, f0, 0.05, BAR * tr.bpc));
@@ -2399,7 +2415,7 @@ window.VinylPlayer.Generative = (() => {
           }
           drumsAt(t, s16, vel * 0.7, { g: !dance, h: dance && sub === 2 });
           /* the hook comes back, softly, on the other voice */
-          if (tr.lead && sec.bar >= sec.len / 2) melodyAt(t, s16, ch, 0.6, (sec.bar % ML) * 8, tr.mel.hook, lead2);
+          if (tr.lead && sec.bar >= sec.len / 2) melodyAt(t, s16, ch, 0.6, (sec.bar % ML) * 8, pb === 3 ? tr.mel.answer : tr.mel.hook, lead2);
         }
         if (sec.name === 'outro') {
           if (sec.bar === 0 && s16 === 0 && tr.trans.boom) boom(t);
