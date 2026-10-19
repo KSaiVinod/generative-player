@@ -114,7 +114,17 @@ window.VinylPlayer.Generative = (() => {
     dub:     [[0, 7, 0], [8, 7, 0]],
     garage:  [[0, 2, 0], [3, 1, 0], [6, 2, 0], [10, 2, 12], [13, 2, 0]],
     trance:  [[2, 1, 0], [3, 1, 0], [6, 1, 0], [7, 1, 0], [10, 1, 0], [11, 1, 0], [14, 1, 0], [15, 1, 0]],
-    bside:   [[0, 3, 0], [10, 3, 0]]
+    bside:   [[0, 3, 0], [10, 3, 0]],
+    /* the genres' own: a syncopated house line, Chicago's jacking bass, deep
+       house walking slowly, a progressive pulse, a drone under melodic
+       house, disco's octaves with ghost notes, a minimal blip */
+    houseSync:  [[0, 2, 0], [3, 1, 0], [7, 1, 12], [10, 2, 0], [13, 1, 7]],
+    jack:       [[0, 1.5, 0], [3, 1, 0], [6, 1, 12], [7, 1, 0], [10, 1.5, 0], [13, 1, 10], [14, 1, 12]],
+    deepWalk:   [[0, 4, 0], [6, 2, 7], [10, 4, 0], [14, 1, 10]],
+    progPulse:  [[2, 1.5, 0], [6, 1.5, 0], [10, 1.5, 0], [12, 1, 12], [14, 1.5, 0]],
+    drone:      [[0, 8, 0], [8, 6, 0], [14, 2, 7]],
+    discoGhost: [[0, 1, 0], [2, 0.5, 12], [3, 1, 0], [6, 1, 12], [8, 1, 0], [9, 0.4, 0], [10, 1, 12], [11, 1, 7], [14, 1, 12], [15, 0.4, 10]],
+    blip:       [[0, 1, 0], [7, 1, 0], [11, 1, 12]]
   };
   /* how the chords are played: held, or stabbed on these steps */
   const RHYTHMS = {
@@ -149,22 +159,22 @@ window.VinylPlayer.Generative = (() => {
     house:     { label: 'house', bpm: [122, 126], swing16: 0.06, kit: 'k909t', beats: 'house', bass: ['house', 'off'],
                  tones: ['saw', 'square'], harmony: 'both', scales: ['minor', 'dorian', 'major'], sevenths: 0.5, bpc: [1, 2],
                  rhythms: ['organ', 'stab', 'pump', 'piano'], pads: ['bright'], waves: ['sawtooth', 'square'],
-                 leads: ['organ', 'pluck', 'keys', 'saxophone', 'trumpet', 'sawlead'], leadPats: ['hook', 'arp'], leadChance: 0.8, form: 'edm', roll: 'roll', fill: 'hat',
+                 leads: ['organ', 'piano', 'pluck', 'saxophone', 'trumpet', 'sawlead'], leadPats: ['hook', 'arp'], leadChance: 0.8, form: 'edm', roll: 'roll', fill: 'hat',
                  fx: { verb: 0.3, verbLen: 2, delay: 3, fb: 0.3, dmix: 0.2, pump: 0.3, bright: 13000 } },
     deep:      { label: 'deep house', bpm: [118, 124], swing16: 0.12, kit: 'deep', beats: 'house', bass: ['off', 'house'],
                  tones: ['sub', 'saw'], harmony: 'minor', scales: ['minor', 'dorian'], sevenths: 0.9, bpc: [1, 2],
                  rhythms: ['stab', 'keys', 'pad', 'wurli'], pads: ['dark'], waves: ['sawtooth'],
-                 leads: ['keys', 'bell', 'saxophone', 'flute', 'guitar-electric'], leadPats: ['hook'], leadChance: 0.7, form: 'edm', roll: 'roll', fill: 'hat',
+                 leads: ['keys', 'wurli', 'saxophone', 'flute', 'vibraphone'], leadPats: ['hook'], leadChance: 0.7, form: 'edm', roll: 'roll', fill: 'hat',
                  fx: { verb: 0.4, verbLen: 2.6, delay: 3, fb: 0.35, dmix: 0.25, pump: 0.3, sat: 0.1, bright: 9000 } },
     prog:      { label: 'progressive house', bpm: [122, 128], kit: 'k909', beats: 'tech', bass: ['roll', 'trance'],
                  tones: ['saw', 'reese'], harmony: 'minor', scales: ['minor', 'dorian'], sevenths: 0.3, bpc: [2, 4],
                  rhythms: ['pad', 'stabpad'], pads: ['strings', 'dark'], waves: ['sawtooth'],
-                 leads: ['pluck', 'bell', 'sawlead', 'violin', 'harp'], leadPats: ['arp'], leadChance: 1, form: 'prog', roll: 'roll', fill: 'hat',
+                 leads: ['pluck', 'sawlead', 'bell', 'pluck', 'harp'], leadPats: ['arp'], leadChance: 1, form: 'prog', roll: 'roll', fill: 'hat',
                  fx: { verb: 0.42, verbLen: 3, delay: 3, fb: 0.42, dmix: 0.3, pump: 0.32, chorus: 0.25, bright: 13500 } },
     melodic:   { label: 'melodic house', bpm: [120, 124], kit: 'organic', beats: 'tech', bass: ['off', 'roll'],
                  tones: ['sub', 'reese'], harmony: 'minor', scales: ['minor'], sevenths: 0.4, bpc: [2],
                  rhythms: ['pad'], pads: ['strings', 'dark'], waves: ['sawtooth'], leadOct: 2,
-                 leads: ['bell', 'pluck', 'violin', 'flute', 'sawlead', 'xylophone'], leadPats: ['arp', 'hook'], leadChance: 1, form: 'prog', roll: 'roll', fill: 'hat',
+                 leads: ['marimba', 'bell', 'violin', 'flute', 'dan-tranh', 'concert-harp'], leadPats: ['arp', 'hook'], leadChance: 1, form: 'prog', roll: 'roll', fill: 'hat',
                  fx: { verb: 0.55, verbLen: 3.6, delay: 3, fb: 0.48, dmix: 0.35, pump: 0.28, chorus: 0.35, bright: 11000 } },
     uplift:    { label: 'uplifting trance', bpm: [138, 142], kit: 'rumble', beats: 'trance', bass: ['trance'],
                  tones: ['saw', 'reese'], harmony: 'trance', scales: ['minor', 'major'], sevenths: 0, bpc: [2],
@@ -174,7 +184,7 @@ window.VinylPlayer.Generative = (() => {
     trance:    { label: 'classic trance', bpm: [130, 138], kit: 'rumble', beats: 'trance', bass: ['trance', 'roll'],
                  tones: ['saw', 'square'], harmony: 'minor', scales: ['minor', 'phrygian'], sevenths: 0, bpc: [2, 4],
                  rhythms: ['gate', 'pad'], pads: ['dark', 'strings'], waves: ['sawtooth', 'square'],
-                 leads: ['supersaw', 'pluck', 'acid', 'sawlead', 'violin'], leadPats: ['arp', 'acid'], leadChance: 1, form: 'trance', roll: 'roll', fill: 'snare',
+                 leads: ['supersaw', 'sawlead', 'supersaw', 'sawlead', 'pluck'], leadPats: ['arp', 'acid'], leadChance: 1, form: 'trance', roll: 'roll', fill: 'snare',
                  fx: { verb: 0.42, verbLen: 2.8, delay: 3, fb: 0.45, dmix: 0.3, pump: 0.35, sat: 0.15, bright: 13500 } },
     lofi:      { label: 'lo-fi', bpm: [72, 90], swing8: 0.38, human: true, kit: 'dusty', beats: 'lofi', bass: ['lofi'],
                  tones: ['sub', 'saw'], harmony: 'jazz', scales: ['major', 'dorian'], sevenths: 1, bpc: [1, 2],
@@ -184,7 +194,7 @@ window.VinylPlayer.Generative = (() => {
     disco:     { label: 'disco house', bpm: [118, 125], swing16: 0.06, kit: 'disco', beats: 'disco', bass: ['octave', 'disco'],
                  tones: ['saw', 'square'], harmony: 'major', scales: ['major', 'mixo', 'dorian'], sevenths: 0.6, bpc: [1, 2],
                  rhythms: ['pump', 'chop', 'stabpad'], pads: ['bright', 'strings'], waves: ['sawtooth', 'square'],
-                 leads: ['organ', 'keys', 'trumpet', 'saxophone', 'violin', 'guitar-electric'], leadPats: ['hook'], leadChance: 0.8, form: 'edm', roll: 'roll', fill: 'snare',
+                 leads: ['violin', 'trumpet', 'saxophone', 'guitar-electric', 'organ', 'violin'], leadPats: ['hook'], leadChance: 0.8, form: 'edm', roll: 'roll', fill: 'snare',
                  fx: { verb: 0.3, verbLen: 1.8, delay: 2, fb: 0.25, dmix: 0.15, pump: 0.45, sat: 0.2, chorus: 0.35, bright: 12500 } },
     acid:      { label: 'acid house', bpm: [120, 128], kit: 'k909', beats: 'house', bass: ['roll', 'off'],
                  tones: ['acid'], harmony: 'minor', scales: ['minor', 'phrygian', 'dorian'], sevenths: 0, bpc: [4],
@@ -194,17 +204,17 @@ window.VinylPlayer.Generative = (() => {
     chicago:   { label: 'chicago house', bpm: [118, 125], swing16: 0.16, kit: 'k909t', beats: 'house', bass: ['house', 'octave'],
                  tones: ['square', 'saw'], harmony: 'both', scales: ['dorian', 'major', 'minor'], sevenths: 0.75, bpc: [1, 2],
                  rhythms: ['stab', 'keys', 'piano', 'organ'], pads: ['bright'], waves: ['square'],
-                 leads: ['organ', 'keys', 'saxophone', 'trumpet', 'squarelead'], leadPats: ['hook'], leadChance: 0.7, form: 'edm', roll: 'roll', fill: 'snare',
+                 leads: ['piano', 'organ', 'grand-piano', 'saxophone', 'organ'], leadPats: ['hook'], leadChance: 0.7, form: 'edm', roll: 'roll', fill: 'snare',
                  fx: { verb: 0.22, verbLen: 1.6, delay: 2, fb: 0.25, dmix: 0.15, pump: 0.2, sat: 0.35, bright: 12000 } },
     minimal:   { label: 'minimal house', bpm: [120, 126], swing16: 0.1, kit: 'soft', beats: 'minimal', bass: ['off', 'dub'],
                  tones: ['sub'], harmony: 'one', scales: ['minor', 'dorian'], sevenths: 0.8, bpc: [4],
                  rhythms: ['lone', 'dubstab', 'wurli'], pads: ['dark'], waves: ['sawtooth'], leadOct: 2,
-                 leads: ['pluck', 'bell', 'squarelead', 'xylophone'], leadPats: ['hook'], leadChance: 0.35, form: 'edm', roll: 'sweep', fill: 'hat',
+                 leads: ['blip', 'bell', 'xylophone-real', 'squarelead'], leadPats: ['hook'], leadChance: 0.35, form: 'edm', roll: 'sweep', fill: 'hat',
                  fx: { verb: 0.38, verbLen: 2.6, delay: 3, fb: 0.5, dmix: 0.35, pump: 0.18, sat: 0.12, bright: 8500 } },
     tech:      { label: 'tech house', bpm: [124, 128], swing16: 0.08, kit: 'k2step', beats: 'tech', bass: ['roll', 'garage'],
                  tones: ['saw', 'square', 'reese'], harmony: 'minor', scales: ['minor', 'phrygian'], sevenths: 0.3, bpc: [2, 4],
                  rhythms: ['chop', 'lone'], pads: ['dark'], waves: ['square', 'sawtooth'],
-                 leads: ['acid', 'pluck', 'organ', 'trumpet', 'squarelead', 'guitar-electric'], leadPats: ['acid', 'hook'], leadChance: 0.55, form: 'edm', roll: 'sweep', fill: 'hat',
+                 leads: ['vox', 'squarelead', 'acid', 'organ', 'vox', 'blip'], leadPats: ['acid', 'hook'], leadChance: 0.55, form: 'edm', roll: 'sweep', fill: 'hat',
                  fx: { verb: 0.28, verbLen: 2, delay: 3, fb: 0.35, dmix: 0.22, pump: 0.3, sat: 0.3, bright: 12500 } },
     /* not in the rotation: only the B-side is this */
     bside:     { label: 'b-side', bpm: [86, 95], kit: 'brk', beats: 'bside', bass: ['bside'],
@@ -482,6 +492,146 @@ window.VinylPlayer.Generative = (() => {
     };
   }
 
+  /* ---- the genres' own ways of playing -----------------------------------
+     What makes one style not another, beyond its instruments: how long its
+     motif is (two bars, or four), how busy and how held, its shape (an arch,
+     a rise, a fall, a wave, or barely moving), how far it ranges and leaps,
+     how short its notes are played, how its counter-melody and its keyboard
+     comp move, what its bass does, how its chords are voiced. bars: motif
+     length; rhythms: one bar each (x a note, - held, . rest); gate: how much
+     of its length a note sounds; accent: the strong beats leaned on. */
+  const PROFILES = {
+    house:   { bars: [2], rhythms: ['x-x-x.xx', 'x--x--x.', 'x-xx-x..', 'x.x-x.x-', 'xx-x--x.'], contour: ['arch', 'wave'], range: 7, leap: 0.2, held: 0.15, gate: 0.85,
+               counter: { rest: 0.3, contour: 'wave' }, comp: [[0, 6, 10], [2, 6, 10, 14], [3, 8, 14]], bass: ['house', 'off', 'houseSync'], voicing: 'close', model: 0.4 },
+    chicago: { bars: [2], riff: true, rhythms: ['x.x..x..', '.x.x..x.', 'x..x.x..', 'xx..x...', '..x.x.x.'], contour: ['static', 'wave'], range: 5, leap: 0.15, held: 0.05, gate: 0.55,
+               counter: { rest: 0.4, contour: 'static' }, comp: [[0, 3, 6, 10, 12], [2, 6, 9, 14], [0, 3, 8, 11]], bass: ['jack', 'house', 'octave'], voicing: 'close', model: 0 },
+    deep:    { bars: [2, 4], rhythms: ['x---..x.', 'x--x----', '..x---x.', 'x---x---', '.x--..x-'], contour: ['fall', 'arch'], range: 5, leap: 0.1, held: 0.45, gate: 0.95,
+               counter: { rest: 0.5, contour: 'fall' }, comp: [[0, 10], [3, 12], [0, 6]], bass: ['deepWalk', 'off', 'house'], voicing: 'open', model: 0.5 },
+    prog:    { bars: [4], rhythms: ['x-x-x-x-', 'x--x--x-', 'x-x--x-x', 'x---x-x-', 'xx-x-x-x'], contour: ['rise', 'arch', 'wave'], range: 8, leap: 0.15, held: 0.2, gate: 0.9,
+               counter: { rest: 0.25, contour: 'rise' }, comp: [[0, 8], [0, 6, 12]], bass: ['roll', 'trance', 'progPulse'], voicing: 'open', model: 0.5,
+               arp: { rest: 0.12, hold: 0.12, span: 5 } },
+    melodic: { bars: [4], rhythms: ['x--x-x--', 'x---x.x.', '.x-x--x-', 'x-x---..', 'x--x--..'], contour: ['arch', 'fall', 'wave'], range: 8, leap: 0.25, held: 0.35, gate: 0.92,
+               counter: { rest: 0.35, contour: 'arch' }, comp: [[0, 10], [0, 6]], bass: ['off', 'roll', 'drone'], voicing: 'open', model: 0.5,
+               arp: { rest: 0.25, hold: 0.2, span: 4 } },
+    trance:  { bars: [4], rhythms: ['x---x---', 'x-----x-', 'x---x-x-', 'x--x--x-', 'x-------'], contour: ['rise', 'arch'], range: 9, leap: 0.3, held: 0.55, gate: 1,
+               counter: { rest: 0.2, contour: 'rise' }, comp: [[0, 8], [0]], bass: ['trance', 'roll'], voicing: 'close', model: 0.4,
+               arp: { rest: 0.05, hold: 0.06, span: 6 } },
+    uplift:  { bars: [4], rhythms: ['x---x---', 'x-x-x---', 'x---x-x-', 'x-----x-'], contour: ['rise', 'arch'], range: 9, leap: 0.3, held: 0.5, gate: 1,
+               counter: { rest: 0.2, contour: 'rise' }, comp: [[0, 8]], bass: ['trance'], voicing: 'open', model: 0.4, arp: { rest: 0.05, hold: 0.06, span: 6 } },
+    minimal: { bars: [2], rhythms: ['x.......', '..x.....', 'x...x...', '...x..x.', '.x......'], contour: ['static'], range: 3, leap: 0.05, held: 0, gate: 0.35,
+               counter: { rest: 0.65, contour: 'static' }, comp: [[3], [6], [3, 11]], bass: ['off', 'dub', 'blip'], voicing: 'close', model: 0 },
+    disco:   { bars: [2], rhythms: ['x-x-x.x.', 'x.xx.x..', 'xx.x.x..', 'x-x.x-x.', '.x.x-x-.'], contour: ['arch', 'wave'], range: 7, leap: 0.25, held: 0.15, gate: 0.75,
+               counter: { rest: 0.2, contour: 'wave' }, comp: [[2, 6, 10, 14], [1, 4, 7, 10, 14], [2, 6, 9, 13]], bass: ['disco', 'octave', 'discoGhost'], voicing: 'close', model: 0.2 },
+    tech:    { bars: [2], rhythms: ['x.x.....', '.x..x...', 'x..x....', '..x.x...', 'xx......'], contour: ['static', 'fall'], range: 4, leap: 0.2, held: 0, gate: 0.4,
+               counter: { rest: 0.5, contour: 'static' }, comp: [[2, 10], [3, 11, 14], [0, 3, 8, 11, 14]], bass: ['hook', 'hook', 'garage'], voicing: 'close', model: 0 },
+    acid:    { bars: [2], rhythms: ['x.x.x.x.', 'xx.x.xx.', 'x.xx.x.x'], contour: ['wave'], range: 6, leap: 0.3, held: 0, gate: 0.6,
+               counter: { rest: 0.5, contour: 'wave' }, comp: [[3], [3, 11]], bass: ['acidseq', 'acidseq', 'roll'], voicing: 'close', model: 0 },
+    lofi:    { bars: [2], rhythms: ['x--x-x--', 'x---.x-x', '.x-x---.', 'x-x---x-', 'x--.x-..'], contour: ['fall', 'wave'], range: 6, leap: 0.2, held: 0.35, gate: 0.8,
+               counter: { rest: 0.45, contour: 'fall' }, comp: [[0, 10], [3, 12]], bass: ['lofi'], voicing: 'open', model: 0.4 },
+    bside:   { bars: [2], rhythms: ['x---x-x-', 'x--x----'], contour: ['fall'], range: 6, leap: 0.1, held: 0.4, gate: 0.95,
+               counter: { rest: 0.4, contour: 'fall' }, comp: [[0]], bass: ['bside'], voicing: 'open', model: 0 }
+  };
+  /* a shape's target over a phrase, x from 0 to 1: how far up (in scale steps) */
+  const SHAPES = {
+    arch: (x) => Math.sin(Math.PI * x), rise: (x) => x, fall: (x) => 1 - x,
+    wave: (x) => 0.5 + 0.5 * Math.sin(2 * Math.PI * x), static: () => 0.15
+  };
+  /* the theme: one motif, said and developed. A phrase is L bars of eighths:
+     a number a scale degree, 'h' held, null a rest. Written from the
+     profile with the track's second stream (q). Returns the motif (hook)
+     and what is done with it: the question it asks (answer), an altered
+     ending (alt), the motif a step late (disp), in another register (reg),
+     and the close home (close). */
+  function writeTheme(q, P) {
+    const pick = (a) => a[Math.floor(q() * a.length)];
+    const L = pick(P.bars), shape = SHAPES[pick(P.contour)];
+    const held = (rh) => { const k = rh.lastIndexOf('x'); return k < 0 ? rh : rh.slice(0, k + 1) + '-'.repeat(7 - k); };
+    const r1 = pick(P.rhythms), r2 = pick(P.rhythms), r3 = pick(P.rhythms);
+    /* two bars: the motif and its cadence; four: motif, development, the motif again, cadence. A riff (Chicago): call, then a shorter answer */
+    let bars = L === 2 ? [r1, held(r2)] : [r1, r2, r1, held(r3)];
+    if (P.riff) bars = [r1, r2.replace(/x/g, (m, i) => (i > 4 ? '.' : m))];
+    /* some notes held longer where the profile likes long notes */
+    bars = bars.map((b) => b.split('').map((c, i, a) => (c === 'x' && i > 0 && a[i - 1] === 'x' && q() < P.held ? '-' : c)).join(''));
+    const rhythm = bars.join(''), n = rhythm.split('').filter((c) => c === 'x').length;
+    const start = pick([0, 2, 4]), span = Math.max(2, P.range - 2);
+    const notes = [];
+    let d = start;
+    for (let i = 0; i < n; i++) {
+      notes.push(d);
+      const target = start + Math.round(shape((i + 1) / Math.max(1, n)) * span);
+      const leap = q() < P.leap ? pick([2, 3]) : 1;
+      d += Math.sign(target - d) * Math.min(Math.abs(target - d), leap) || (q() < 0.4 ? pick([-1, 1]) : 0);
+      d = Math.max(-2, Math.min(P.range + 1, d));
+    }
+    /* in four bars, bar three says bar one again (the motif comes back) */
+    if (L === 4) { const c1 = bars[0].split('').filter((c) => c === 'x').length, c2 = bars[1].split('').filter((c) => c === 'x').length; for (let i = 0; i < c1; i++) if (c1 + c2 + i < n) notes[c1 + c2 + i] = notes[i]; }
+    const lay = (rh, ps) => { let j = 0; return rh.split('').map((c) => (c === 'x' ? ps[Math.min(j++, ps.length - 1)] : c === '-' ? 'h' : null)); };
+    const hook = lay(rhythm, notes);
+    const lastOn = (ph) => { for (let i = ph.length - 1; i >= 0; i--) if (typeof ph[i] === 'number') return i; return -1; };
+    const ending = (ph, degs) => { const o = ph.slice(); let k = lastOn(o); for (let j = degs.length - 1; j >= 0 && k >= 0; j--) { o[k] = degs[j]; do k--; while (k >= 0 && typeof o[k] !== 'number'); } return o; };
+    const answer = ending(hook, [pick([4, 1]) + 1, pick([4, 1])]);
+    const alt = ending(hook, [notes[n - 1] + pick([-2, 2]), notes[n - 1] + pick([-1, 1])]);
+    const close = ending(hook, [2, 1, 0]);
+    /* a step late: the whole phrase moved one eighth on, its last moment dropped */
+    const disp = [null].concat(hook.slice(0, hook.length - 1)).map((v, i, a) => (v === 'h' && i > 0 && a[i - 1] === null ? null : v));
+    const reg = hook.map((v) => (typeof v === 'number' ? v + (start >= 2 ? -3 : 3) : v));
+    return { L, hook, answer, alt, close, disp, reg, rhythm };
+  }
+  /* the arpeggio as a phrase: two bars of sixteenths over the chord's tones
+     (and the octave above), shaped, with rests, accents and a few held notes;
+     and a second version for the phrases that turn it round */
+  function writeArp(q, A) {
+    const pick = (a) => a[Math.floor(q() * a.length)];
+    const shape = pick(['up', 'down', 'updown', 'pedal', 'skip']);
+    const span = A.span || 4, out = [];
+    for (let i = 0; i < 32; i++) {
+      const x = i % 8;
+      let n = shape === 'up' ? x % span : shape === 'down' ? (span - 1) - (x % span) : shape === 'updown' ? [0, 1, 2, 3, 4, 3, 2, 1][x] % span
+        : shape === 'pedal' ? (x % 2 ? 1 + (x >> 1) % (span - 1) : 0) : [0, 2, 1, 3, 2, 4, 3, 5][x] % span;
+      const rest = q() < A.rest && i % 4 !== 0, hold = !rest && q() < A.hold;
+      out.push({ n: rest ? -1 : n, acc: i % 4 === 0 || (i % 8 === 3 && q() < 0.5), len: hold ? 1.8 : 0.85 });
+    }
+    const turn = out.map((s, i) => (s.n < 0 ? s : Object.assign({}, s, { n: i >= 16 ? (span - 1) - s.n : s.n })));
+    return { A: out, B: turn };
+  }
+  /* the counter-melody's lines: two bars of eighths as chord tones (or rests),
+     a version with its end changed, and a sparser answer */
+  function writeCounter(q, C) {
+    const shape = SHAPES[C.contour] || SHAPES.wave;
+    const A = Array.from({ length: 16 }, (_, i) => (q() < C.rest && i % 4 ? -1 : Math.max(0, Math.min(3, Math.round(shape(i / 15) * 3 + (q() - 0.5))))));
+    const A2 = A.map((v, i) => (i >= 12 ? (v < 0 ? Math.floor(q() * 4) : (v + 1 + Math.floor(q() * 2)) % 4) : v));
+    const B = A.map((v, i) => (i % 2 ? -1 : v));
+    return { A, A2, B };
+  }
+  /* a bass line written for this track (tech house's hook, a jacking line):
+     two bars of [step, length, interval] */
+  function writeBassHook(q, P) {
+    const pick = (a) => a[Math.floor(q() * a.length)];
+    const bar = (busy) => {
+      const out = [];
+      for (let st = 0; st < 16; st++) {
+        const on = st === 0 ? q() < 0.7 : st % 4 === 2 ? q() < 0.65 : st % 2 ? q() < 0.22 * busy : q() < 0.3 * busy;
+        if (on) out.push([st, pick([0.8, 1, 1.5]), pick([0, 0, 0, 12, 7, 10, 3])]);
+      }
+      if (!out.length) out.push([0, 2, 0]);
+      return out;
+    };
+    const a = bar(1), b = bar(1.3);
+    return [a, b];
+  }
+  /* the 303: sixteen steps, each on or off, a note of the chord, an accent, a slide into the next */
+  function writeAcid(q) {
+    const pick = (a) => a[Math.floor(q() * a.length)];
+    return Array.from({ length: 16 }, (_, i) => ({ on: i === 0 || q() < 0.68, iv: pick([0, 0, 0, 12, 7, 3, 10, 5, 12]), acc: q() < 0.3, slide: q() < 0.25 }));
+  }
+  /* a sound's per-track settings, within bounds: each track's lead a little
+     its own (attack, filter, resonance, detune, how much goes to the echo) and
+     the same all the way through it */
+  function writePreset(q) {
+    const in_ = (lo, hi) => lo + q() * (hi - lo);
+    return { atk: in_(0.6, 1.6), cut: in_(0.7, 1.4), res: in_(0.7, 1.4), spread: in_(0.6, 1.5), send: in_(0.6, 1.3), bell: [3.5, 2.01, 5.07, 1.4][Math.floor(q() * 4)] };
+  }
+
   /* ---- MusicVAE's melodies ----------------------------------------------
      Magenta's melody model (vendor/magenta: TensorFlow.js and the
      2-bar melody checkpoint, all served from here) is loaded once the first
@@ -621,16 +771,32 @@ window.VinylPlayer.Generative = (() => {
     const lines = S.bass.concat(['octave', 'off']).filter((l) => l !== tr.bassLine);
     tr.bassLine2 = lines[Math.floor(r() * lines.length)];
     tr.close = Array.from({ length: 8 }, (_, i) => (i === 7 ? 0 : i % 2 && r() < 0.5 ? -1 : Math.floor(r() * 4)));
-    tr.mel = writeMelody(r, pick);
-    /* or the model's: a melody MusicVAE wrote (learned from real music),
-       put into this key and developed the same way */
-    if (side !== 'b' && modelPool.length && r() < 0.65) {
-      const m = fromModel(modelPool[Math.floor(r() * modelPool.length)], tr.scale, pick);
-      if (m) { tr.mel = m; tr.melBy = 'model'; }
+    const PR = PROFILES[style] || PROFILES.house;
+    const written = writeMelody(r, pick);            // (drawn as before, so the picks after it stay the same)
+    /* the B-side keeps the melody it has always had; every other record is written from its style */
+    tr.mel = side === 'b' ? Object.assign(written, { L: 2, alt: written.answer, disp: [null].concat(written.hook.slice(0, 15)), reg: written.hook, rhythm: '' }) : writeTheme(q, PR);
+    /* or the model's: a melody MusicVAE wrote (learned from real music), put
+       into this key - only where the style's own writing allows one, and
+       developed the same way */
+    const useModel = side !== 'b' && modelPool.length && r() < 0.65;
+    if (useModel && q() < (PR.model || 0)) {
+      const m = fromModel(modelPool[Math.floor(q() * modelPool.length)], tr.scale, qpick);
+      if (m) { tr.mel = Object.assign({}, m, { L: 2, alt: m.answer, disp: [null].concat(m.hook.slice(0, 15)), reg: m.hook.map((v) => (typeof v === 'number' ? v + 3 : v)) }); tr.melBy = 'model'; }
     }
+    tr.profile = style;
+    tr.arpLine = writeArp(q, PR.arp || { rest: 0.1, hold: 0.1, span: 4 });
+    tr.cp = writeCounter(q, PR.counter);
+    tr.comp = [qpick(PR.comp), qpick(PR.comp)];
+    tr.bassLine = qpick(PR.bass);
+    tr.bassLine2 = qpick(PR.bass.concat(['octave', 'off']).filter((l) => l !== tr.bassLine));
+    tr.bassHook = writeBassHook(q, PR);
+    tr.acidSeq = writeAcid(q);
+    tr.preset = writePreset(q);
+    tr.voicing = PR.voicing;
     /* (the hook's first bar, as chord tones and rests, for the parts that
        only need to know where it rests) */
     tr.hook = tr.mel.hook.slice(0, 8).map((v) => (typeof v === 'number' ? ((v % 4) + 4) % 4 : -1));
+    /* the lead's pattern: a recorded voice (but a mallet's or a harp's) sings the theme */
     /* the transitions, each one in or out for this track: no two tracks
        move between sections quite alike */
     tr.trans = { swell: r() < 0.75, revSnare: r() < 0.5, whoosh: r() < 0.6, riserTone: r() < 0.5, boom: r() < 0.55, roll: r() < 0.85 };
@@ -763,7 +929,7 @@ window.VinylPlayer.Generative = (() => {
     if (bright(tr.lead2) && bright(tr.counter)) tr.counter = pickIn((X.counter || []).filter((v) => counterOk(v) && !bright(v)));
     if (tr.shake && tr.beat.p.length >= 4) tr.shake = null;
     /* every sampled instrument this track will need loaded */
-    const synthLead = { pluck: 1, supersaw: 1, bell: 1, acid: 1, keys: 1, sawlead: 1, squarelead: 1 };
+    const synthLead = { pluck: 1, supersaw: 1, bell: 1, acid: 1, keys: 1, sawlead: 1, squarelead: 1, wurli: 1, blip: 1, vox: 1 };
     const RESP_SAMPLES = { 'brass-hit': ['trumpet', 'trombone'], 'string-stab': ['violin'], 'guitar-lick': ['guitar-electric'], 'sax-lick': ['saxophone'] };
     tr.samples = [...new Set([
       ...(RESP_SAMPLES[tr.resp] || []), tr.revPiano || tr.rhythm === 'piano' || tr.moves.some((m) => m.principal === 'revPiano') ? tr.piano : null,
@@ -1194,7 +1360,7 @@ window.VinylPlayer.Generative = (() => {
       }
       if (FX.delay) {
         const pp = new T.PingPongDelay({ delayTime: FX.delay * STEP, feedback: FX.fb, wet: 1 });
-        const send = new T.Gain(FX.dmix);
+        const send = new T.Gain(FX.dmix * ((tr.preset && tr.preset.send) || 1));
         keysHP.connect(send);
         send.chain(new T.Filter({ type: 'highpass', frequency: 300 }), pp, new T.Filter({ type: 'lowpass', frequency: 2600 }), filter);
       }
@@ -1230,6 +1396,7 @@ window.VinylPlayer.Generative = (() => {
       const tomIn = { tomHi: lane(0.3), tomMid: lane(0), tomLo: lane(-0.3) };
       const shade = () => 0.985 + rnd() * 0.03;                        // a hair of pitch, never the same twice
       function kick(t, g) {
+        if (LOG) LOG.push({ bar: curBar, t: +(t + off).toFixed(3), part: 'kick', g: +g.toFixed(3) });
         if (K.kickReal) { hit(K.kickReal, t, Math.min(1, 0.85 * g / 0.95), drums); kickSyn.triggerAttackRelease(kf1, kdec, t, Math.min(1, 0.45 * g / 0.95)); return; }
         kickSyn.triggerAttackRelease(kf1, kdec, t, Math.min(1, g / 0.95));
         if (KIT.click) hit(K.click, t, Math.min(1, g / 0.95), drums);
@@ -1271,8 +1438,14 @@ window.VinylPlayer.Generative = (() => {
       if (midSyn) midSyn.chain(new T.Distortion({ distortion: 0.35, oversample: 'none' }), new T.Filter({ type: 'highpass', frequency: 110 }), low);
       const bassPlayer = tr.realBass ? sampler(tr.realBass, { release: 0.25 }) : null;
       if (bassPlayer) bassPlayer.chain(new T.Filter({ type: 'highpass', frequency: 55 }), low);
-      function bass(t, f0, g, dur) {
-        const v = Math.min(1, g / 0.42);
+      function bass(t, f0, g, dur, acc, slide) {
+        if (LOG) LOG.push({ bar: curBar, t: +(t + off).toFixed(3), part: 'bass', f: Math.round(f0), g: +g.toFixed(4), dur: +dur.toFixed(3) });
+        const v = Math.min(1, (g / 0.42) * (acc ? 1.2 : 1));
+        if (tone === 'acid' && midSyn) {
+          midSyn.portamento = slide ? 0.07 : 0.02;
+          midSyn.filterEnvelope.octaves = acc ? 4.4 : 3.4;
+          midSyn.filterEnvelope.baseFrequency = 130 * (0.65 + 0.9 * (0.5 - 0.5 * Math.cos(2 * Math.PI * curBar / 16)));
+        }
         if (bassPlayer) {
           /* a bass player: the recording over the sub, the synth layer resting */
           subSyn.triggerAttackRelease(f0, dur, t, v * 0.6 * (SUB[tr.style] || 1));
@@ -1321,6 +1494,16 @@ window.VinylPlayer.Generative = (() => {
           }
         };
       };
+      const PRF = PROFILES[tr.profile || tr.style] || PROFILES.house;
+      const PS = tr.preset || { atk: 1, cut: 1, res: 1, spread: 1, send: 1, bell: 3.5 };
+      const ML = (tr.mel && tr.mel.L) || 2;              // the motif's length in bars
+      /* a voice's vowel: three resonances over a buzzing source */
+      function vowel(f1, f2, f3) {
+        const inp = new T.Gain(1), sum = new T.Gain(1).connect(keys);
+        [[f1, 1, 6], [f2, 0.55, 8], [f3, 0.3, 10]].forEach(([f, gain, q]) =>
+          inp.connect(new T.Filter({ type: 'bandpass', frequency: f, Q: q }).connect(new T.Gain(gain * 2.2).connect(sum))));
+        return inp;
+      }
       const fat = (w, spread, env, vol, n) => pool(() => new T.Synth({ oscillator: { type: 'fat' + w, count: 3, spread }, envelope: env, volume: vol }), n || 8);
       const wave = tr.wave;
       const padSyn = fat(wave, padTone === 'strings' ? 30 : 14, { attack: padTone === 'strings' ? 0.95 : 0.6, decay: 0.4, sustain: 0.8, release: 1.2 }, -20).connect(toneF());
@@ -1341,6 +1524,7 @@ window.VinylPlayer.Generative = (() => {
         .connect(sync(new T.Tremolo({ frequency: 3.6, depth: 0.32, spread: 160 }).start(), 3.6).connect(keys));
       function keysNote(t, f0, g, dur) { rhodes.triggerAttackRelease(f0, dur, t, Math.min(1, g / 0.07)); }
       function chord(t, notes, g, dur, attack, type, toneName) {
+        if (LOG) LOG.push({ bar: curBar, t: +(t + off).toFixed(3), part: 'chords', f: Math.round(notes[0]), n: notes.length, g: +g.toFixed(4), dur: +dur.toFixed(3) });
         const syn = type === 'square' ? buildSyn : toneName === 'strings' ? stringSyn : attack >= 0.1 ? padSyn : stabSyn;
         syn.triggerAttackRelease(notes, dur, t, Math.min(1, g / 0.07));
       }
@@ -1381,7 +1565,12 @@ window.VinylPlayer.Generative = (() => {
         }
         if (role && !resolved[role]) resolved[role] = { want: lv, played: lv, source: 'synth' };
         if (lv === 'keys') return (t, f0, g, dur) => rhodes.triggerAttackRelease(f0, Math.max(dur, 0.6), t, Math.min(1, (g / 0.04) * 0.8));
-        const syn = lv === 'pluck' ? plucks({ attackNoise: 1.2, dampening: 4200, resonance: 0.92, volume: -6 }, 3)
+        if (lv === 'wurli') { const w = wurliVoice(); return (t, f0, g, dur) => w.triggerAttackRelease(f0, Math.max(dur, 0.4), t, Math.min(1, (g / 0.04) * 0.85)); }
+        const syn = lv === 'pluck' ? plucks({ attackNoise: 1.2, dampening: 4200 * PS.cut, resonance: Math.min(0.97, 0.92 * (0.97 + 0.03 * PS.res)), volume: -6 }, 3)
+          /* minimal's blip: a tone whose pitch drops as it is struck, short */
+          : lv === 'blip' ? pool(() => new T.MembraneSynth({ pitchDecay: 0.012, octaves: 1.2, oscillator: { type: 'triangle' }, envelope: { attack: 0.001, decay: 0.16 * PS.atk, sustain: 0, release: 0.05 }, volume: -12 }), 3)
+          /* a vocal chop, for tech house's short motifs */
+          : lv === 'vox' ? pool(() => new T.Synth({ oscillator: { type: 'sawtooth' }, envelope: { attack: 0.005, decay: 0.12, sustain: 0.3, release: 0.08 }, volume: -15 }), 4)
           /* the organ without its recordings: drawbars (a fundamental, the octave and twelfth), a slow rotor */
           : lv === 'organ-synth' ? pool(() => new T.Synth({ oscillator: { type: 'custom', partials: [1, 0.7, 0.45, 0, 0.25, 0, 0, 0.12] }, envelope: { attack: 0.01, decay: 0.05, sustain: 0.9, release: 0.12 }, volume: -20 }), 4)
           /* a flute's breath: a sine, a little air, vibrato late */
@@ -1390,30 +1579,39 @@ window.VinylPlayer.Generative = (() => {
           : lv === 'brass' ? pool(() => new T.MonoSynth({ oscillator: { type: 'sawtooth' }, filter: { type: 'lowpass', Q: 2, rolloff: -24 },
               filterEnvelope: { attack: 0.04, decay: 0.25, sustain: 0.4, release: 0.2, baseFrequency: 350, octaves: 3 },
               envelope: { attack: 0.03, decay: 0.2, sustain: 0.6, release: 0.2 }, volume: -18 }), 4)
-          : lv === 'supersaw' ? pool(() => new T.Synth({ oscillator: { type: 'fatsawtooth', count: 5, spread: 40 }, envelope: { attack: 0.004, decay: 0.2, sustain: 0.3, release: 0.15 }, volume: -22 }), 4)
-          : lv === 'bell' ? pool(() => new T.FMSynth({ harmonicity: 3.5, modulationIndex: 12, envelope: { attack: 0.002, decay: 0.9, sustain: 0, release: 0.6 },
+          : lv === 'supersaw' ? pool(() => new T.Synth({ oscillator: { type: 'fatsawtooth', count: 5, spread: 40 * PS.spread }, envelope: { attack: 0.004 * PS.atk, decay: 0.2, sustain: 0.3, release: 0.15 }, volume: -22 }), 4)
+          : lv === 'bell' ? pool(() => new T.FMSynth({ harmonicity: PS.bell, modulationIndex: 12, envelope: { attack: 0.002, decay: 0.9, sustain: 0, release: 0.6 },
               modulationEnvelope: { attack: 0.002, decay: 0.4, sustain: 0, release: 0.4 }, volume: -16 }), 4)
           /* held leads, not struck ones: a saw gliding note to note through a
              filter that opens on each, and a hollow square with a singer's vibrato */
-          : lv === 'sawlead' ? new T.MonoSynth({ portamento: 0.045, oscillator: { type: 'fatsawtooth', count: 2, spread: 14 },
-              filter: { type: 'lowpass', Q: 3, rolloff: -24 },
-              filterEnvelope: { attack: 0.02, decay: 0.4, sustain: 0.5, release: 0.3, baseFrequency: 700, octaves: 2.6 },
-              envelope: { attack: 0.02, decay: 0.2, sustain: 0.85, release: 0.25 }, volume: -19 })
+          : lv === 'sawlead' ? new T.MonoSynth({ portamento: 0.045, oscillator: { type: 'fatsawtooth', count: 2, spread: 14 * PS.spread },
+              filter: { type: 'lowpass', Q: 3 * PS.res, rolloff: -24 },
+              filterEnvelope: { attack: 0.02, decay: 0.4, sustain: 0.5, release: 0.3, baseFrequency: 700 * PS.cut, octaves: 2.6 },
+              envelope: { attack: 0.02 * PS.atk, decay: 0.2, sustain: 0.85, release: 0.25 }, volume: -19 })
           : lv === 'squarelead' ? new T.MonoSynth({ portamento: 0.03, oscillator: { type: 'square' },
               filter: { type: 'lowpass', Q: 1.5, rolloff: -12 },
-              filterEnvelope: { attack: 0.01, decay: 0.3, sustain: 0.6, release: 0.2, baseFrequency: 900, octaves: 2 },
+              filterEnvelope: { attack: 0.01, decay: 0.3, sustain: 0.6, release: 0.2, baseFrequency: 900 * PS.cut, octaves: 2 },
               envelope: { attack: 0.015, decay: 0.15, sustain: 0.8, release: 0.2 }, volume: -22 })
-          : lv === 'acid' ? new T.MonoSynth({ oscillator: { type: 'sawtooth' }, filter: { type: 'lowpass', Q: 12, rolloff: -24 },
-              filterEnvelope: { attack: 0.003, decay: 0.18, sustain: 0.1, release: 0.1, baseFrequency: 260, octaves: 3.4 },
+          : lv === 'acid' ? new T.MonoSynth({ oscillator: { type: 'sawtooth' }, filter: { type: 'lowpass', Q: 12 * PS.res, rolloff: -24 },
+              filterEnvelope: { attack: 0.003, decay: 0.18, sustain: 0.1, release: 0.1, baseFrequency: 260 * PS.cut, octaves: 3.4 },
               envelope: { attack: 0.003, decay: 0.15, sustain: 0.5, release: 0.05 }, volume: -16 })
           : pool(() => new T.Synth({ oscillator: { type: 'custom', partials: [1, 0.45, 0.2, 0.1] }, envelope: { attack: 0.005, decay: 0.1, sustain: 0.8, release: 0.08 }, volume: -18 }), 4);
         const vib = lv === 'sawlead' || lv === 'squarelead' || lv === 'flute' ? sync(new T.Vibrato({ frequency: 5.5, depth: 0, wet: 1 }), 5.5) : null;
-        if (lv === 'supersaw') syn.connect(new T.Filter({ type: 'lowpass', frequency: 3200 }).connect(keys));
+        if (lv === 'supersaw') syn.connect(new T.Filter({ type: 'lowpass', frequency: 3200 * PS.cut }).connect(keys));
+        else if (lv === 'vox') syn.connect(vowel(570, 840, 2410));
         else if (vib) syn.chain(vib, keys);
         else syn.connect(keys);
-        return (t, f0, g, dur, accent) => {
+        return (t, f0, g, dur, accent, slide) => {
           const v = Math.min(1, (g / 0.04) * (accent ? 1.15 : 1));
-          if (lv === 'acid') syn.triggerAttackRelease(f0 / 2, dur, t, accent ? 1 : v * 0.75);
+          if (lv === 'acid') {
+            /* the 303: a slide glides into its note, an accent opens the filter wider; the cutoff wanders over sixteen bars */
+            syn.portamento = slide ? 0.06 : 0;
+            syn.filterEnvelope.octaves = accent ? 4.2 : 3.2;
+            syn.filterEnvelope.baseFrequency = 260 * PS.cut * (0.6 + 0.9 * (0.5 - 0.5 * Math.cos(2 * Math.PI * curBar / 16)));
+            syn.triggerAttackRelease(f0 / 2, dur, t, accent ? 1 : v * 0.75);
+          }
+          else if (lv === 'blip') syn.triggerAttackRelease(f0 / 2, Math.min(dur, 0.2), t, v);
+          else if (lv === 'vox') syn.triggerAttackRelease(f0 / 2, Math.min(dur, STEP * 1.2), t, v);
           else if (lv === 'pluck') syn.triggerAttackRelease(f0, dur, t, v);
           else if (lv === 'flute') { const d = Math.max(dur, STEP * 1.6); vibrato(vib, t, d); syn.triggerAttackRelease(f0 / 2, d, t, v); }
           else if (lv === 'organ-synth' || lv === 'brass') syn.triggerAttackRelease(f0 / 2, dur, t, v);
@@ -1423,8 +1621,11 @@ window.VinylPlayer.Generative = (() => {
       }
       const bassPlayerOk = !tr.realBass || !!SM[srcOf(tr.realBass)];
       if (tr.realBass) resolved.bass = { want: tr.realBass, played: bassPlayerOk ? tr.realBass : 'synth bass', source: bassPlayerOk ? 'tonejs-instruments' : 'synth', reason: bassPlayerOk ? undefined : 'recordings did not load' };
-      const lead1 = makeLead(tr.leadVoice, 'lead');
-      const lead2 = tr.lead2 && tr.lead2 !== tr.leadVoice ? makeLead(tr.lead2, 'lead2') : lead1;
+      /* (tests only: with tr.log an array, every note played is written down - bar, step, part, pitch, level, length) */
+      const LOG = Array.isArray(tr.log) ? tr.log : null;
+      const logged = (part, fn) => (LOG ? (t, f0, g, dur, ...x) => { LOG.push({ bar: curBar, t: +(t + off).toFixed(3), part, f: Math.round(f0), g: +g.toFixed(4), dur: +dur.toFixed(3) }); return fn(t, f0, g, dur, ...x); } : fn);
+      const lead1 = logged('lead', makeLead(tr.leadVoice, 'lead'));
+      const lead2 = tr.lead2 && tr.lead2 !== tr.leadVoice ? logged('lead2', makeLead(tr.lead2, 'lead2')) : lead1;
       let lead = lead1;                                  // which one plays, set per bar
 
       /* ---- the counter-melody: a second instrument with a part of its own ---- */
@@ -1480,35 +1681,45 @@ window.VinylPlayer.Generative = (() => {
             .connect(sync(new T.Vibrato({ frequency: 5.2, depth: 0.08, wet: 1 }), 5.2).connect(keys));     // a flute
       const realCounter = realCv ? sampler(cv, SAMPLED[cv].hold ? { attack: 0.05, release: 1.2 } : SAMPLED[cv].fam === 'ring' ? { release: 1.4 } : SAMPLED[cv].fam === 'bowed' ? { attack: 0.18, release: 1 } : {}) : null;
       if (realCounter) realCounter.chain(...fxOf(cv), keys);
+      if (LOG) [realCounter, counterSyn].forEach((o) => {
+        if (!o) return;
+        const tar = o.triggerAttackRelease.bind(o);
+        o.triggerAttackRelease = (n, d, t, v) => { (Array.isArray(n) ? n : [n]).forEach((f) => LOG.push({ bar: curBar, t: +(t + off).toFixed(3), part: 'counter', f: Math.round(f), g: +(v || 0).toFixed(3), dur: +d.toFixed(3) })); return tar(n, d, t, v); };
+      });
+      /* the counter-melody's line for this bar (its two-bar line, the varied
+         one, the line again, the sparse answer) and the comp's rhythm (the
+         profile's, one for four bars and another for the next four) */
+      const cLine = (barIndex) => { const ph = Math.floor(barIndex / 2) % 4, L = ph === 1 ? tr.cp.A2 : ph === 3 ? tr.cp.B : tr.cp.A, o = (barIndex % 2) * 8; return L.slice(o, o + 8); };
+      const cComp = (barIndex) => tr.comp[Math.floor(barIndex / 4) % 2];
       function realCounterAt(t, s16, ch, g, barIndex) {
         const R = SAMPLED[cv], k = R.oct, v = (x) => Math.min(1, x * g);
-        const tones = ch.notes.concat([ch.top]).map((h) => h * k), line = tr.counterLine;
+        const tones = ch.notes.concat([ch.top]).map((h) => h * k), line = cLine(barIndex);
         if (R.fam === 'keys') {
-          const hits = R.hold ? [0] : tr.compVariant ? [3, 8, 14] : [0, 6, 10];
+          const hits = R.hold ? [0] : cComp(barIndex);
           if (has(hits, s16)) realCounter.triggerAttackRelease(ch.notes.map((h) => h * k), R.hold ? BAR * 0.98 : STEP * 3, t, v(0.75));
         } else if (R.fam === 'pluck') {
-          if (s16 % 2 === 0) realCounter.triggerAttackRelease(tones[[0, 1, 2, 3, 2, 1, 2, 3][s16 / 2]], STEP * 2, t, v(0.8));
+          if (s16 % 2 === 0 && line[s16 / 2] >= 0) realCounter.triggerAttackRelease(tones[line[s16 / 2]], STEP * 2, t, v(s16 % 4 ? 0.7 : 0.82));
         } else if (R.fam === 'strum') {
           /* down, down-up: the strings a few milliseconds apart, the up-strokes reversed */
           const hits = { 0: 1, 6: -1, 8: 1, 12: -1, 14: 1 };
           if (hits[s16]) (hits[s16] > 0 ? ch.notes : ch.notes.slice().reverse()).forEach((h, i) => realCounter.triggerAttackRelease(h * k, STEP * 2, t + i * 0.012, v(hits[s16] > 0 ? 0.75 : 0.55)));
         } else if (R.fam === 'chop') {
-          if (has(tr.compVariant ? [2, 6, 9, 13] : [1, 4, 7, 10, 14], s16)) realCounter.triggerAttackRelease(tones[(s16 >> 1) % 3], STEP * 0.8, t, v(0.75));
+          if (has(cComp(barIndex), s16)) realCounter.triggerAttackRelease(tones[line[s16 >> 1] >= 0 ? line[s16 >> 1] : (s16 >> 1) % 3], STEP * 0.8, t, v(0.75));
         } else if (R.fam === 'stab') {
-          const hits = tr.compVariant ? [2, 10, 14] : [0, 3, 6, 12];
-          if (has(hits, s16)) realCounter.triggerAttackRelease(ch.notes.map((h) => h * k), STEP * 1.4, t, v(0.8));
+          if (has(cComp(barIndex), s16)) realCounter.triggerAttackRelease(ch.notes.map((h) => h * k), STEP * 1.4, t, v(0.8));
         } else if (R.fam === 'ring') {
           /* bells and vibes: chord tones on the beat, left to ring - and
              damped as the chord changes, so the last one does not ring on
              under the new */
           if (s16 === 0 && barIndex % tr.bpc === 0) realCounter.releaseAll(t);
-          if (s16 % 4 === 0) realCounter.triggerAttackRelease(tones[[0, 2, 1, 3][s16 / 4]], BEAT * 1.5, t, v(0.7));
+          if (s16 % 4 === 0 && line[s16 / 2] >= 0) realCounter.triggerAttackRelease(tones[line[s16 / 2]], BEAT * 1.5, t, v(0.7));
         } else if (R.fam === 'figure') {
           /* a thumb piano's or a zither's little figure of its own over two beats, repeating */
-          if (has([0, 3, 6, 8, 11], s16)) { const n = line[[0, 3, 6, 8, 11].indexOf(s16) + (barIndex % 2) * 3]; if (n >= 0) realCounter.triggerAttackRelease(tones[n], STEP * 2, t, v(0.8)); }
+          const FIG = Math.floor(barIndex / 2) % 4 === 3 ? [0, 3, 6, 10, 12] : [0, 3, 6, 8, 11];
+          if (has(FIG, s16)) { const n = line[FIG.indexOf(s16) + 1]; if (n >= 0) realCounter.triggerAttackRelease(tones[n], STEP * 2, t, v(0.8)); }
         } else if (R.fam === 'bowed') {
           /* long notes, two beats each, along the counter line */
-          if (s16 % 8 === 0) { const n = line[(s16 / 8) + (barIndex % 4) * 2]; if (n >= 0) realCounter.triggerAttackRelease(tones[n], BEAT * 2, t, v(0.8)); }
+          if (s16 % 8 === 0) { const n = line[s16 / 2]; if (n >= 0) realCounter.triggerAttackRelease(tones[n], BEAT * 2, t, v(0.8)); }
         } else if (s16 % 2 === 0) {
           /* a wind answers the lead, in the gaps of its hook, notes held a little */
           const n = line[s16 / 2], hook = tr.hook[s16 / 2];
@@ -1519,27 +1730,27 @@ window.VinylPlayer.Generative = (() => {
         if (realCounter) { realCounterAt(t, s16, ch, g, barIndex); return; }
         if (!counterSyn) return;
         const tones = ch.notes.concat([ch.top]);
-        const line = tr.counterLine;
+        const line = cLine(barIndex);
         const v = (x) => Math.min(1, x * g);
         if (pat === 'piano') {
-          const hits = tr.compVariant ? [3, 8, 14] : [0, 6, 10];
+          const hits = cComp(barIndex);
           if (has(hits, s16)) counterSyn.triggerAttackRelease(ch.notes, STEP * 3, t, v(0.75));
         } else if (pat === 'vibes') {
           /* the vibraphone: chord tones on the beat, left to ring */
-          if (s16 % 4 === 0) counterSyn.triggerAttackRelease(tones[[0, 2, 1, 3][s16 / 4]] * 2, BEAT * 1.5, t, v(0.7));
+          if (s16 % 4 === 0 && line[s16 / 2] >= 0) counterSyn.triggerAttackRelease(tones[line[s16 / 2]] * 2, BEAT * 1.5, t, v(0.7));
         } else if (pat === 'marimba') {
-          if (s16 % 2 === 0) { const k = [0, 1, 2, 3, 2, 1, 2, 3][s16 / 2]; counterSyn.triggerAttackRelease(tones[k] * 2, STEP * 1.5, t, v(0.8)); }
+          if (s16 % 2 === 0 && line[s16 / 2] >= 0) counterSyn.triggerAttackRelease(tones[line[s16 / 2]] * 2, STEP * 1.5, t, v(s16 % 4 ? 0.7 : 0.82));
         } else if (pat === 'brass') {
-          const hits = tr.compVariant ? [2, 10, 14] : [0, 3, 6, 12];
-          if (has(hits, s16)) counterSyn.triggerAttackRelease(ch.notes.map((h) => h * 2), STEP * 1.4, t, v(0.8));
+          if (has(cComp(barIndex), s16)) counterSyn.triggerAttackRelease(ch.notes.map((h) => h * 2), STEP * 1.4, t, v(0.8));
         } else if (pat === 'choir') {
           if (s16 === 0 && barIndex % 2 === 0) counterSyn.triggerAttackRelease(ch.notes.map((h) => h * 2), BAR * 2, t, v(0.8));
         } else if (pat === 'kalimba') {
           /* a little figure of its own over two beats, repeating */
-          if (has([0, 3, 6, 8, 11], s16)) { const n = line[[0, 3, 6, 8, 11].indexOf(s16) + (barIndex % 2) * 3]; if (n >= 0) counterSyn.triggerAttackRelease(tones[n] * 2, STEP * 2, t, v(0.8)); }
+          const FIG = Math.floor(barIndex / 2) % 4 === 3 ? [0, 3, 6, 10, 12] : [0, 3, 6, 8, 11];
+          if (has(FIG, s16)) { const n = line[FIG.indexOf(s16) + 1]; if (n >= 0) counterSyn.triggerAttackRelease(tones[n] * 2, STEP * 2, t, v(0.8)); }
         } else if (pat === 'guitar') {
           /* muted guitar: a funk chop on the chord tones */
-          if (has(tr.compVariant ? [2, 6, 9, 13] : [1, 4, 7, 10, 14], s16)) counterSyn.triggerAttackRelease(tones[(s16 >> 1) % 3], STEP, t, v(0.75));
+          if (has(cComp(barIndex), s16)) counterSyn.triggerAttackRelease(tones[line[s16 >> 1] >= 0 ? line[s16 >> 1] : (s16 >> 1) % 3], STEP, t, v(0.75));
         } else if (pat === 'vox') {
           if (has([2, 7, 11, 14], s16)) { const n = line[(s16 >> 1) % 8]; if (n >= 0) counterSyn.triggerAttackRelease(tones[n] * 2, STEP * 1.2, t, v(0.85)); }
         } else if (s16 % 2 === 0) {
@@ -1562,8 +1773,8 @@ window.VinylPlayer.Generative = (() => {
       const chopV = RV === 'vox-chop' ? pool(() => new T.Synth({ oscillator: { type: 'sawtooth' },
         envelope: { attack: 0.004, decay: 0.09, sustain: 0.2, release: 0.05 }, volume: -16 }), 4).connect(formant(660, 1700, 2600)) : null;
       function respondAt(t, s16, ch, g, slot0, phrase) {
-        if (!RV || slot0 !== 8 || s16 < 12) return;
-        if (typeof phrase[14] === 'number' || typeof phrase[15] === 'number') return;   // the melody is still talking
+        if (!RV || slot0 % 16 !== 8 || s16 < 12) return;
+        if (typeof phrase[slot0 + 6] === 'number' || typeof phrase[slot0 + 7] === 'number') return;   // the melody is still talking
         const v = Math.min(1, g);
         if (RV === 'brass-hit' && s16 === 14) {
           const n = ch.notes.map((h) => h * 2);
@@ -1633,9 +1844,9 @@ window.VinylPlayer.Generative = (() => {
       [clarinet, bassoon].forEach((x) => { if (x) x.connect(keys); });
       function woodAt(t, s16, ch, g, barIndex) {
         if (!clarinet && !bassoon) return;
-        const line = tr.counterLine, tones = ch.notes.concat([ch.top]);
+        const line = cLine(barIndex), tones = ch.notes.concat([ch.top]);
         /* the clarinet sings a line, the bassoon walks under it */
-        if (clarinet && s16 % 4 === 2) { const n = line[((s16 >> 2) + barIndex) % 8]; if (n >= 0) clarinet.triggerAttackRelease(tones[n], STEP * 3, t, Math.min(1, 0.75 * g)); }
+        if (clarinet && s16 % 4 === 2) { const n = line[s16 >> 1]; if (n >= 0) clarinet.triggerAttackRelease(tones[n], STEP * 3, t, Math.min(1, 0.75 * g)); }
         if (bassoon && s16 % 8 === 0) bassoon.triggerAttackRelease(s16 ? ch.notes[0] / 2 : ch.root * 2, BEAT * 1.8, t, Math.min(1, 0.7 * g));
       }
       const harmonium = tr.harmonium ? sampler('harmonium', { attack: 0.25, release: 1.2, volume: -18 }) : null;
@@ -1770,10 +1981,18 @@ window.VinylPlayer.Generative = (() => {
       }
       function bassAt(t, s16, ch, g, barIndex, lineName) {
         const turn = barIndex % 4 === 3;                   // the last bar of a phrase turns it round
-        const LINE = BASS[lineName || tr.bassLine];
+        const name = lineName || tr.bassLine;
+        if (name === 'acidseq') {
+          /* the 303's own line: its steps, its accents, its slides */
+          const st = tr.acidSeq[s16];
+          if (st.on) bass(t, ch.root * 2 * Math.pow(2, (st.iv - 12) / 12), g, STEP * (st.slide ? 1.6 : 0.85), st.acc, st.slide);
+          return;
+        }
+        /* the track's own bass hook (tech house): two bars, written for it */
+        const LINE = name === 'hook' ? tr.bassHook[barIndex % 2] : BASS[name] || BASS.off;
         LINE.forEach(([st, len, iv]) => {
           if (st !== s16) return;
-          const up = turn && s16 >= 12 ? 12 : 0;
+          const up = turn && s16 >= 12 && name !== 'hook' ? 12 : 0;
           bass(t, ch.root * 2 * Math.pow(2, (iv + up - 12) / 12), g, STEP * len);
         });
         if (turn && s16 === 15 && !LINE.some(([st]) => st === 15)) bass(t, ch.root * 2 * Math.pow(2, 7 / 12) / 2, g * 0.7, STEP * 0.9);
@@ -1783,7 +2002,8 @@ window.VinylPlayer.Generative = (() => {
       if (chordVoice && RH.voice === 'piano') chordVoice.connect(keys);
       function chordsAt(t, s16, barIndex, ch0, g, invert) {
         /* the same chord, voiced up: its lowest note taken an octave higher */
-        const ch = invert ? Object.assign({}, ch0, { notes: ch0.notes.slice(1).concat([ch0.notes[0] * 2]) }) : ch0;
+        let ch = invert ? Object.assign({}, ch0, { notes: ch0.notes.slice(1).concat([ch0.notes[0] * 2]) }) : ch0;
+        if (RH.held && tr.voicing === 'open' && !invert) ch = openOf(ch);
         if (RH.held) {
           if (s16 === 0 && barIndex % tr.bpc === 0) {
             const dur = BAR * tr.bpc * 1.02;
@@ -1822,26 +2042,43 @@ window.VinylPlayer.Generative = (() => {
         const k = slot0 + s16 / 2, ev = phrase[k];
         if (typeof ev !== 'number') return;
         let len = 1;
-        while (k + len < 16 && phrase[k + len] === 'h') len++;
+        while (k + len < phrase.length && phrase[k + len] === 'h') len++;
+        /* the bar's downbeat leaned on, the beats firmer than what is between them, the phrase's middle fuller */
         const strong = k % 2 === 0;
-        let shape = (strong ? 1 : 0.86) * (0.9 + 0.12 * Math.sin(Math.PI * k / 16));
+        let shape = (k % 8 === 0 ? 1.08 : strong ? 1 : 0.84) * (0.9 + 0.12 * Math.sin(Math.PI * k / phrase.length));
         if (FAM === 'texture') { t = Math.max(0, t + (rnd() - 0.35) * 0.024); shape *= 0.84 + rnd() * 0.3; }   // lo-fi: played behind the beat, by hand
-        voice(t, melHz(ev, ch, strong) * (lift || 1), 0.04 * g * shape, STEP * 2 * len * 0.94);
+        voice(t, melHz(ev, ch, strong) * (lift || 1), 0.04 * g * shape, STEP * 2 * len * (len > 1 ? 0.96 : PRF.gate || 0.94));
+      }
+      /* which telling of the theme a phrase is: in a drop the motif, its
+         question, the motif, the close - and then developed: the altered
+         ending, the motif a step late, in another register; a later drop
+         starts from the developed ones. A section's last phrase closes. */
+      const PLANS = [['hook', 'answer', 'hook', 'close'], ['alt', 'answer', 'disp', 'close'], ['hook', 'reg', 'alt', 'close']];
+      function phraseAt(sec) {
+        const M = tr.mel, p = Math.floor(sec.bar / ML), lastP = Math.floor((sec.len - 1) / ML);
+        if (sec.name !== 'drop') return p % 2 ? M.answer : M.hook;
+        if (p === lastP && p > 0) return M.close;
+        const order = sec.n === 0 ? [0, 1, 2] : [1, 2, 0], plan = PLANS[order[Math.floor(p / 4) % 3]];
+        return M[plan[p % 4]] || M.hook;
       }
       function leadAt(t, s16, ch, g, barIndex, lift) {
         /* the chord's notes, up an octave or two by the style's taste (and one
            more late in a later drop) */
         const tone = (n) => (n >= ch.notes.length ? ch.top : ch.notes[n]) * leadOct * (lift || 1);
-        if (tr.leadPat === 'arp') lead(t, tone(tr.arp[s16 % 4]), 0.035 * g, STEP * 0.9);
-        else if (tr.leadPat === 'acid') {
-          const st = tr.line[s16];
-          if (st.on) lead(t, tone(st.n) * (st.up ? 2 : 1), 0.04 * g, STEP * 0.95, st.acc);
+        if (tr.leadPat === 'arp') {
+          /* two bars of arpeggio, shaped; every fourth phrase turned round */
+          const AL = tr.arpLine, line = Math.floor(barIndex / 2) % 4 === 3 ? AL.B : AL.A, st = line[(barIndex % 2) * 16 + s16];
+          if (st.n >= 0) lead(t, tone(st.n % 4) * (st.n >= 4 ? 2 : 1), (st.acc ? 0.042 : 0.031) * g, STEP * st.len);
+        } else if (tr.leadPat === 'acid') {
+          /* the 303 line, and what a player does to it: the phrase's last bar
+             answers (its accented steps an octave up, a step dropped), and
+             every other eight bars its second half moves to other notes */
+          const st = tr.line[s16], sq = tr.acidSeq[s16], turn = barIndex % 4 === 3, other = Math.floor(barIndex / 8) % 2 === 1 && s16 >= 8;
+          const on = st.on && !(turn && s16 % 5 === 3), n = other ? (st.n + 1) % 4 : st.n, up = st.up || (turn && (st.acc || sq.acc));
+          if (on) lead(t, tone(n) * (up ? 2 : 1), 0.04 * g, STEP * (sq.slide ? 1.6 : 0.95), st.acc || sq.acc, sq.slide);
         } else {
-          /* the melody across four phrases of a drop: the hook, its question,
-             the hook again, and the answer home */
-          const sec = sectionAt(tr, barIndex), ph = Math.floor(sec.bar / 2) % 4, M = tr.mel;
-          const phrase = ph === 1 ? M.answer : ph === 3 && sec.name === 'drop' ? M.close : ph === 2 ? M.hook : Math.floor(barIndex / 2) % 2 ? M.answer : M.hook;
-          melodyAt(t, s16, ch, g, (sec.bar % 2) * 8, phrase, lead, lift);
+          const sec = sectionAt(tr, barIndex);
+          melodyAt(t, s16, ch, g, (sec.bar % ML) * 8, phraseAt(sec), lead, lift);
         }
       }
       function pump(t) {
@@ -1881,7 +2118,7 @@ window.VinylPlayer.Generative = (() => {
       /* a chord voiced open: the lowest note down, the others spread up */
       const openOf = (c) => Object.assign({}, c, { notes: c.notes.map((h, k) => (k === 0 ? h / 2 : k % 2 ? h * 2 : h)) });
       function buildBar(M, stg, t, s16, sub, ch, barIndex, sec, rise, vel, last) {
-        const c = M.concept, hook = tr.mel.hook, slot = (sec.bar % 2) * 8;
+        const c = M.concept, hook = tr.mel.hook, slot = (sec.bar % ML) * 8;
         const roll = (every, g0, g1) => { if (s16 % every === 0) snare(t, g0 + (g1 - g0) * rise, true); };
         const kicking = (on) => { if (on && has(BT.k, s16)) { kick(t, 0.85 * vel); if (sub === 0) pump(t); } };
         const pad = (g, up, len) => { if (s16 === 0 && barIndex % (len || 2) === 0) chord(t, up ? ch.notes.map((h) => h * 2) : ch.notes, g, BAR * (len || 2), 0.6); };
@@ -2020,7 +2257,7 @@ window.VinylPlayer.Generative = (() => {
           if (tease) leadAt(t, s16, ch, 0.38, barIndex);
           const gon = (name) => layerOn(name, sec, sec.bar, true);
           if (gon('perc') || FAM === 'funk') layerAt(t, s16, 0.8 * vel, barIndex);
-          if (tease && gon('resp')) respondAt(t, s16, ch, 0.7, (sec.bar % 2) * 8, tr.mel.hook);
+          if (tease && gon('resp')) respondAt(t, s16, ch, 0.7, (sec.bar % ML) * 8, tr.mel.hook);
           if (sec.bar >= sec.len / 2) {
             if (!tease && gon('counter')) counterAt(t, s16, ch, 0.55, barIndex);
             if (gon('beds')) { stringsAt(t, s16, ch, 0.6, barIndex); woodAt(t, s16, ch, 0.7, barIndex); }
@@ -2130,7 +2367,7 @@ window.VinylPlayer.Generative = (() => {
           if (!bassOnly && (on('perc') || P === 'perc')) layerAt(t, s16, vel, barIndex);
           if (!bassOnly && tr.lead && leadIn && on('resp') && (FAM === 'funk' ? db % 4 === 3 || db % 4 === 1 : db % 8 === 3)) {
             const M = tr.mel, ph = Math.floor(sec.bar / 2) % 4;
-            respondAt(t, s16, ch, 0.9, (sec.bar % 2) * 8, ph === 1 ? M.answer : M.hook);
+            respondAt(t, s16, ch, 0.9, (sec.bar % ML) * 8, ph === 1 ? M.answer : M.hook);
           }
           /* the counter-melody: where the lead rests (a few strong parts, not all at once) */
           if (!bassOnly && on('counter') && (db >= dlen / 4 || laterDrop)) {
@@ -2161,7 +2398,7 @@ window.VinylPlayer.Generative = (() => {
           }
           drumsAt(t, s16, vel * 0.7, { g: !dance, h: dance && sub === 2 });
           /* the hook comes back, softly, on the other voice */
-          if (tr.lead && sec.bar >= sec.len / 2) melodyAt(t, s16, ch, 0.6, (sec.bar % 2) * 8, tr.mel.hook, lead2);
+          if (tr.lead && sec.bar >= sec.len / 2) melodyAt(t, s16, ch, 0.6, (sec.bar % ML) * 8, tr.mel.hook, lead2);
         }
         if (sec.name === 'outro') {
           if (sec.bar === 0 && s16 === 0 && tr.trans.boom) boom(t);
@@ -2204,7 +2441,14 @@ window.VinylPlayer.Generative = (() => {
     return Promise.resolve(ctx.workletsAreReady ? ctx.workletsAreReady() : null).catch(() => {})
       .then(() => new Promise((res) => later(res))).then(() => raw.startRendering()).then((buf) => {
       const l = buf.getChannelData(0), r = buf.numberOfChannels > 1 ? buf.getChannelData(1) : l;
-      return { l: l.slice(skip, skip + want), r: r.slice(skip, skip + want) };
+      /* the last of the headroom: Tone's limiter is a fast compressor, and a
+         kick, the bass and an impact landing together can still pass full
+         scale - above 0.9 the peaks are rounded off, never past 1 (sample by
+         sample, so two segments meet the same either way) */
+      const knee = (x) => { const a = Math.abs(x); return a <= 0.9 ? x : Math.sign(x) * (0.9 + 0.1 * Math.tanh((a - 0.9) / 0.1)); };
+      const L = l.slice(skip, skip + want), R = r.slice(skip, skip + want);
+      for (let i = 0; i < L.length; i++) { L[i] = knee(L[i]); R[i] = knee(R[i]); }
+      return { l: L, r: R };
     });
     });
   }
@@ -2425,7 +2669,7 @@ window.VinylPlayer.Generative = (() => {
   /* a record ready on the shelf: one pressed while the page loads (no tap
      needed to render), and another after each is used */
   /* ---- the critic ---------------------------------------------------------
-     Four tracks are written for every one that is pressed, and the best of
+     Six tracks are written for every one that is pressed, and the best of
      them made: a melody that moves mostly by step with a leap or two, over a
      range of a fifth or so, not too busy or too bare; unlike the last few
      records (another lead, other builds and drops, another key and tempo);
@@ -2435,6 +2679,13 @@ window.VinylPlayer.Generative = (() => {
   try { likes = JSON.parse(localStorage.getItem(LIKES) || '{}') || {}; } catch (e) { likes = {}; }
   const featuresOf = (tr) => ({ style: tr.style, lead: tr.leadVoice, counter: tr.counter, rhythm: tr.rhythm, bass: tr.bassLine,
     build: tr.builds[0] && tr.builds[0].type, drop: tr.drops[0] && tr.drops[0].type, scale: tr.scale });
+  /* what the ear tells apart, for not repeating ourselves: the lead's kind
+     of instrument (not just its name), the motif's rhythm and its shape (up,
+     down, same), the progression, how its builds and drops are made */
+  const famOf = (v) => (!v ? 'none' : SAMPLED[v] ? SAMPLED[v].fam : v === 'pluck' || v === 'blip' ? 'pluck' : v === 'bell' ? 'ring' : v === 'keys' || v === 'wurli' ? 'keys' : 'synth');
+  const contourOf = (mel) => { const ns = (mel.hook || []).filter((v) => typeof v === 'number'); return ns.slice(1).map((v, i) => Math.sign(v - ns[i])).join(''); };
+  const earOf = (tr) => ({ fam: famOf(tr.lead ? tr.leadVoice : null), motif: tr.mel.rhythm || '', contour: contourOf(tr.mel), prog: tr.prog.join(''),
+    moves: (tr.moves || []).map((m) => m.concept).join(','), counterFam: famOf(tr.counter), bpm: tr.bpm });
   function melodyScore(mel) {
     const notes = mel.hook.concat(mel.answer).filter((v) => typeof v === 'number');
     if (notes.length < 4) return -2;
@@ -2453,23 +2704,32 @@ window.VinylPlayer.Generative = (() => {
   function scoreTrack(tr) {
     let s = melodyScore(tr.mel);
     const f = featuresOf(tr);
+    const e = earOf(tr);
     recent.forEach((p, i) => {
-      const g = featuresOf(p), w = 1 / (i + 1);
-      ['lead', 'counter', 'build', 'drop', 'rhythm'].forEach((k) => { if (f[k] === g[k]) s -= 0.25 * w; });
-      if (Math.abs(p.bpm - tr.bpm) < 2) s -= 0.1 * w;
-      if (p.key === tr.key) s -= 0.1 * w;
+      const g = featuresOf(p), h = earOf(p), w = 1 / (i + 1);
+      ['lead', 'counter', 'rhythm'].forEach((k) => { if (f[k] === g[k]) s -= 0.2 * w; });
+      /* the same kind of lead, the same motif, the same shape, chords or arrangement: heard as the same record */
+      if (tr.style === p.style) s -= 0.2 * w;
+      if (e.fam === h.fam) s -= 0.3 * w;
+      if (e.motif && e.motif === h.motif) s -= 0.35 * w;
+      if (e.contour === h.contour) s -= 0.3 * w;
+      if (e.prog === h.prog) s -= 0.2 * w;
+      if (e.moves === h.moves) s -= 0.2 * w;
+      if (e.counterFam === h.counterFam) s -= 0.1 * w;
+      if (Math.abs(h.bpm - e.bpm) < 2) s -= 0.1 * w;
+      /* (the key is left alone: two records in one key in a row is fine) */
     });
     Object.entries(f).forEach(([k, v]) => { s += 0.2 * Math.min(3, likes[k + ':' + v] || 0) / 3; });
     return s;
   }
   function pickTrack(rpm) {
     let best = null;
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 6; i++) {
       const tr = compose(newSeed(), 'a', rpm), sc = scoreTrack(tr);
       if (!best || sc > best.sc) best = { tr, sc };
     }
     recent.unshift(best.tr);
-    if (recent.length > 3) recent.length = 3;
+    if (recent.length > 4) recent.length = 4;
     return best.tr;
   }
   /* a like: this record's choices remembered, for the critic to lean towards */
