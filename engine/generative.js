@@ -927,8 +927,9 @@ window.VinylPlayer.Generative = (() => {
       /* (for the critic: the hook as the ear has it) */
       tr.mel = Object.assign({}, tr.mel, { rhythm: tr.progHook.plan + ':' + tr.progHook.hook.map((x) => x[1]).join(','), hook: tr.progHook.hook.map((x) => x[2]) });
       tr.leadVoice = 'prog:' + tr.patch.rec.lead;
+      tr.bassLine = 'prog';
       tr.samples = progSets(tr.patch);
-      tr.resolved = Object.fromEntries(Object.entries(tr.patch.rec).map(([k, v]) => [k, { want: v, played: v, source: 'recordings' }]));
+      tr.resolved = null;                            // (filled in when its sounds are made)
       return tr;
     }
     /* every sampled instrument this track will need loaded */
@@ -1233,22 +1234,17 @@ window.VinylPlayer.Generative = (() => {
 
   /* ==== progressive house, made like a record =================================
      Progressive house is not played on the shared band above: it has a
-     renderer of its own, built the way a producer builds an organic
-     progressive track - from recordings only (the tonejs instruments and
-     the VCSL), turned into the genre's sounds: strings, a harmonium or an
-     organ looped and doubled a few cents apart into wide pads; a harp, a
-     marimba, a piano or a zither under a filter that snaps on each note,
-     for the arpeggio; the electric or the upright bass gated into a
-     rolling line; the acoustic kick tightened over a timpani tuned far down;
-     a violin (or cello, or horn) section singing the hook; violins gliding
-     up over a timpani roll for the riser; slowed cymbals swept through a
-     filter. Each record picks its own recordings for each of those, so no
-     two sound alike. It is then mixed like a record: every part at its
-     level, each ducking under the kick by its own amount, a hall, a room and
-     a ping-pong echo, the lows kept mono, glued, and limited with a
-     look-ahead. Everything that changes over the track (filters opening,
-     the kick muffled and opening, the music thinning into the gap) follows
-     smooth curves over the whole arrangement, worked out from the bar, so
+     renderer of its own, built the way a producer builds a track - the
+     genre's own sounds synthesised note by note at 44.1 kHz (supersaw pads,
+     a pluck whose filter snaps on every note, the sub-and-saw bass, a
+     supersaw or saw lead, a drum machine's kick, clap and hats, risers and
+     sweeps), each record its own versions of them, with recordings where the
+     genre uses them (a piano, real strings under the breakdowns, a shaker,
+     a ride and a crash, sometimes real claps or congas). Mixed like a
+     record: every part at its level, each ducking under the kick by its own
+     amount, a hall, a room and a ping-pong echo, the lows kept mono, glued,
+     limited with a look-ahead. Everything that changes over the track
+     follows smooth curves over the arrangement, worked out from the bar, so
      any part can be pressed alone and still meet its neighbours. */
   const PSR = 44100;
   const srOf = (tr) => (tr && tr.sr) || SR;
@@ -1300,33 +1296,99 @@ window.VinylPlayer.Generative = (() => {
     return e;
   };
 
+  /* synthesis, for the sounds progressive house is made of */
+  const band = (x, lo, hi) => biquad(biquad(x, 'hp', lo), 'lp', hi);
+  const hp4 = (x, f) => biquad(biquad(x, 'hp', f, 0.54), 'hp', f, 1.31);
+  /* a band-limited saw (PolyBLEP); freq a number or a function of the sample */
+  function saw(freq, n, ph) {
+    const out = new Float32Array(n), Fx = typeof freq === 'number';
+    ph = ph || 0;
+    for (let i = 0; i < n; i++) {
+      const dt = (Fx ? freq : freq(i)) / PSR;
+      let y = 2 * ph - 1;
+      if (ph < dt) { const t = ph / dt; y -= 2 * t - t * t - 1; }
+      else if (ph > 1 - dt) { const t = (ph - 1) / dt; y -= t * t + 2 * t + 1; }
+      out[i] = y; ph += dt; if (ph >= 1) ph -= 1;
+    }
+    return out;
+  }
+  function sine(freq, n, ph) {
+    const out = new Float32Array(n), Fx = typeof freq === 'number';
+    ph = ph || 0;
+    for (let i = 0; i < n; i++) { out[i] = Math.sin(2 * Math.PI * ph); ph += (Fx ? freq : freq(i)) / PSR; if (ph >= 1) ph -= 1; }
+    return out;
+  }
+  /* a square from two saws (band-limited too), its width w */
+  function square(freq, n, ph, w) {
+    const a = saw(freq, n, ph || 0), b = saw(freq, n, ((ph || 0) + (w || 0.5)) % 1);
+    for (let i = 0; i < n; i++) a[i] = (a[i] - b[i]) * 0.5;
+    return a;
+  }
+  /* an envelope: attack a, decay time constant d to sustain s, gate dur, release r (seconds) */
+  function adsr(dur, a, d, s, r) {
+    const on = Math.max(1, Math.round(dur * PSR)), nr = Math.round(r * PSR), e = new Float32Array(on + nr);
+    for (let i = 0; i < on; i++) { const t = i / PSR; e[i] = t < a ? t / a : s + (1 - s) * Math.exp(-(t - a) / d); }
+    const lv = e[on - 1];
+    for (let i = 0; i < nr; i++) e[on + i] = lv * Math.exp(-i / PSR / (r / 5));
+    for (let i = Math.max(0, e.length - 64), k = 0; i < e.length; i++, k++) e[i] *= 1 - k / 64;
+    return e;
+  }
+  const stereo = (n) => [new Float32Array(n), new Float32Array(n)];
+  /* several saws a few cents apart, spread across the field: the sound of progressive and trance */
+  function supersaw(midi, n, voices, cents, width, seed, vib, wave) {
+    const r = seeded(seed >>> 0), f0 = mtof(midi), [L, R] = stereo(n);
+    const pans = Array.from({ length: voices }, (_, i) => (voices > 1 ? -width + 2 * width * i / (voices - 1) : 0));
+    for (let i = pans.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [pans[i], pans[j]] = [pans[j], pans[i]]; }
+    for (let v = 0; v < voices; v++) {
+      const o = voices > 1 ? -1 + 2 * v / (voices - 1) : 0, f = f0 * Math.pow(2, o * cents / 1200);
+      const fr = vib ? (i) => f * vib(i) : f;
+      const x = wave === 'square' ? square(fr, n, r(), 0.5) : saw(fr, n, r());
+      const amp = Math.abs(o) < 1e-9 ? 1 : 0.75, th = (pans[v] + 1) * Math.PI / 4, cl = Math.cos(th) * amp, cr = Math.sin(th) * amp;
+      for (let i = 0; i < n; i++) { L[i] += x[i] * cl; R[i] += x[i] * cr; }
+    }
+    const k = 1 / Math.sqrt(voices);
+    for (let i = 0; i < n; i++) { L[i] *= k; R[i] *= k; }
+    return [L, R];
+  }
+  const METAL = [205.3, 304.4, 369.6, 522.7, 540.0, 800.0];
+  function metal(n, k) {
+    const out = new Float32Array(n);
+    METAL.forEach((f, j) => { for (let i = 0; i < n; i++) out[i] += Math.sign(Math.sin(2 * Math.PI * f * k * i / PSR + j)) / 6; });
+    return out;
+  }
+
   /* ---- this record's sounds ------------------------------------------------
-     A patch per record (from its seed): which recordings play each part, and
-     how (within bounds), so every record is its own. */
+     A patch per record (from its seed). The genre's own sounds are made
+     here - supersaw pads, a synth pluck for the arpeggio, the sub-and-saw
+     bass, a supersaw or saw lead, a drum machine's kick, clap and hats -
+     each record its own version of them; recordings only where progressive
+     house uses them: a piano (for the keys, now and then the hook or the
+     arpeggio), real strings under the pad in the breakdowns, a shaker, a
+     ride and a crash, sometimes real claps or congas. */
   function writeProgPatch(q) {
     const r = (lo, hi) => lo + q() * (hi - lo), pick = (a) => a[Math.floor(q() * a.length)];
     return {
-      /* the recordings: the pad's (strings, a harmonium, an organ), the arpeggio's, the lead's, the keys', the bass, the kick, the hand drum */
-      rec: { pad: pick(['strings', 'strings', 'harmonium', 'organ']), arp: pick(['harp', 'harp', 'marimba', 'piano', 'dan-tranh']),
-        lead: pick(['violins', 'violins', 'cellos', 'horn', 'vibes']), keys: pick(['grand-piano', 'grand-piano', 'piano', 'upright-piano']),
-        bass: pick(['bass-electric', 'bass-electric', 'contrabass']), kick: pick(['kick', 'kick2']), hand: pick(['conga', 'conga', 'bongo', 'darbuka']) },
-      pad: { cents: r(14, 32), attack: r(0.35, 1.1) },
-      pluck: { decay: r(0.07, 0.17), snap: r(2, 4.5), snapT: r(0.03, 0.08) },
-      lead: { attack: r(0.006, 0.04) },
-      kick: { decay: r(0.1, 0.17) },
+      rec: { keys: pick(['grand-piano', 'grand-piano', 'upright-piano', 'rhodes']), arp: pick(['synth', 'synth', 'synth', 'piano', 'bell']),
+        lead: pick(['supersaw', 'supersaw', 'sawlead', 'pluck', 'piano']), strings: q() < 0.65, clap: pick(['synth', 'synth', 'recorded']), hand: pick(['synth', 'synth', 'conga']) },
+      pad: { voices: pick([5, 7, 7, 9]), cents: r(14, 32), width: r(0.6, 1), attack: r(0.35, 1.1), wave: pick(['saw', 'saw', 'saw', 'square']) },
+      pluck: { voices: pick([2, 3, 3, 4]), cents: r(5, 14), decay: r(0.07, 0.17), snap: r(2, 4.5), snapT: r(0.03, 0.08), wave: pick(['saw', 'saw', 'square']), octave: q() < 0.3 },
+      keys: { index: r(1.0, 2.2), bell: r(0.2, 0.55), ratio: pick([3.5, 3.5, 2, 4.1, 5]), decay: r(0.6, 1.3) },
+      lead: { voices: pick([5, 7, 7]), cents: r(10, 22), vibRate: r(4.6, 6), vibDepth: r(0.003, 0.006), attack: r(0.006, 0.04) },
+      bass: { kind: pick(['sawsine', 'sawsine', 'reese', 'square']), decay: r(0.06, 0.13), sustain: r(0.4, 0.7) },
+      kick: { f0: r(46, 56), sweep: r(150, 230), punch: r(0.014, 0.028), decay: r(0.1, 0.17), click: r(0.2, 0.5), drive: r(1.5, 2.6) },
       clap: pick(['clap', 'clap', 'snareclap']), hat: r(0.05, 0.12), hatHp: r(6000, 9000), ride: q() < 0.7, shaker: q() < 0.85,
       perc: pick([[[3, 4], [6, 0], [10, 2], [14, 4]], [[2, 2], [7, 4], [11, 0]], [[3, 4], [5, 2], [10, 4], [13, 0], [15, 2]]]),
       hall: { len: r(2.8, 4.2), bright: r(6000, 10000), dark: r(1200, 2000) }, delay: pick([0.75, 0.75, 0.5, 0.375]), fb: r(0.35, 0.5),
       arp: pick([[0, 1, 2, 3, 2, 1, 2, 4, 0, 1, 2, 3, 2, 3, 4, 3], [0, 2, 1, 3, 2, 4, 3, 1, 0, 2, 1, 3, 4, 2, 3, 1], [0, 1, 2, 1, 3, 2, 4, 2, 0, 1, 2, 1, 3, 4, 3, 2],
-        [0, -1, 2, 1, -1, 3, 2, -1, 0, 4, 2, -1, 3, 1, 2, 4], [0, 1, 0, 2, 0, 3, 0, 4, 1, 2, 1, 3, 1, 4, 2, 3]]),
-      bassLine: pick(['roll', 'roll', 'gallop', 'offroll'])
+        [0, -1, 2, 1, -1, 3, 2, -1, 0, 4, 2, -1, 3, 1, 2, 4], [0, 1, 0, 2, 0, 3, 0, 4, 1, 2, 1, 3, 1, 4, 2, 3]])
     };
   }
-  /* the recordings a record needs: its choices, and those every one uses (the kit, the claps, the shaker, the timpani; violins, celli and a harmonium for the riser and the air) */
-  const PROG_SET = { strings: [], harmonium: [], organ: ['chapel-organ'], harp: ['concert-harp'], marimba: ['marimba'], piano: ['grand-piano'], 'dan-tranh': ['dan-tranh'],
-    violins: [], cellos: [], horn: ['french-horn'], vibes: ['vibraphone', 'grand-piano'], conga: ['perc-conga'], bongo: ['perc-bongo'], darbuka: ['perc-darbuka'] };
-  const progSets = (P) => [...new Set(['kit-acoustic', 'perc-claps', 'perc-shaker', 'perc-timpani', 'violin', 'cello', 'harmonium', P.rec.keys, P.rec.bass]
-    .concat(PROG_SET[P.rec.pad] || [], PROG_SET[P.rec.arp] || [], PROG_SET[P.rec.lead] || [], PROG_SET[P.rec.hand] || []))];
+  /* the recordings a record needs: the kit's ride and crash and a shaker always; a piano, strings, claps, congas where it uses them */
+  const progSets = (P) => {
+    const C = P.rec, piano = C.keys !== 'rhodes' ? C.keys : 'grand-piano';
+    return [...new Set(['kit-acoustic', 'perc-shaker'].concat(C.keys !== 'rhodes' || C.arp === 'piano' || C.lead === 'piano' ? [piano] : [],
+      C.strings ? ['violin', 'cello'] : [], C.clap === 'recorded' ? ['perc-claps'] : [], C.hand === 'conga' ? ['perc-conga'] : []))];
+  };
   const progCache = new Map();                       // a record's sounds and its recordings, kept with it (two records: on the deck and next)
   function progBankFor(tr) {
     if (progCache.has(tr.seed)) return progCache.get(tr.seed);
@@ -1342,118 +1404,153 @@ window.VinylPlayer.Generative = (() => {
     const once = (key, make) => { if (!memo.has(key)) memo.set(key, make()); return memo.get(key); };
     const NT = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
     const midiOf = (nm) => { const m = /^([A-G]#?)(-?\d)$/.exec(nm); return m ? NT.indexOf(m[1]) + 12 * (+m[2] + 1) : null; };
-    /* (a set that did not load: the nearest that did, by its role; the record plays on) */
-    const ALT = { 'chapel-organ': 'harmonium', 'concert-harp': 'grand-piano', marimba: 'concert-harp', 'grand-piano': 'piano', 'dan-tranh': 'concert-harp', 'french-horn': 'cello', vibraphone: 'grand-piano',
-      'upright-piano': 'grand-piano', piano: 'grand-piano', contrabass: 'bass-electric', 'bass-electric': 'contrabass', violin: 'cello', cello: 'violin', harmonium: 'cello' };
-    const setOf = (n) => { let x = n, k = 0; while (x && !SM[x] && k++ < 4) x = ALT[x]; return SM[x] ? x : null; };
+    const ALT = { 'grand-piano': 'upright-piano', 'upright-piano': 'grand-piano', violin: 'cello', cello: 'violin' };
+    const setOf = (n) => { let x = n, k = 0; while (x && !SM[x] && k++ < 3) x = ALT[x]; return SM[x] ? x : null; };
     const nearest = (set, m) => { const s = setOf(set); if (!s) return null; let best = null, bd = 99; for (const [nm, b] of Object.entries(SM[s])) { const sm = midiOf(nm); if (sm == null) continue; const d = Math.abs(m - sm); if (d < bd) { bd = d; best = [b, m - sm]; } } return best; };
-    /* a recording read at a rate - re-pitched, from its own rate to 44.1k, a rate that may move; loop: ping-pong over its body, to hold it as long as wanted */
-    function read(b, semis, n, loop, rateFn) {
+    /* a recording read at a rate (re-pitched, from its own rate to 44.1k); loop: ping-pong over its body to hold it */
+    function read(b, semis, n, loop) {
       const out = new Float32Array(n); if (!b) return out;
       const src = b.getChannelData(0), base = b.sampleRate / PSR * Math.pow(2, semis / 12), L0 = Math.floor(src.length * 0.25), L1 = Math.floor(src.length * 0.85);
       let pos = 0, dir = 1;
       for (let i = 0; i < n; i++) {
         if (pos >= src.length - 1 && !loop) break;
         const j = Math.floor(pos), f = pos - j; out[i] = (src[j] || 0) * (1 - f) + (src[j + 1] || 0) * f;
-        pos += dir * base * (rateFn ? rateFn(i) : 1);
+        pos += dir * base;
         if (loop && dir > 0 && pos >= L1) dir = -1; else if (loop && dir < 0 && pos <= L0) dir = 1;
       }
       return out;
     }
     const hitOf = (set, name, semis, sec) => { const s = setOf(set), b = s && (SM[s][name] || Object.values(SM[s])[0]); return read(b, semis || 0, Math.round((sec || (b ? b.duration : 0.1)) * PSR)); };
-    const note = (set, m, sec, loop, rateFn) => { const x = nearest(set, m); return x ? read(x[0], x[1], Math.round(sec * PSR), loop, rateFn) : new Float32Array(Math.round(sec * PSR)); };
-    /* two players a few cents apart, left and right */
-    const pair = (set, m, sec, cents, loop) => [note(set, m + cents / 100, sec, loop), note(set, m - cents / 100, sec, loop)];
+    const note = (set, m, sec, loop) => { const x = nearest(set, m); return x ? read(x[0], x[1], Math.round(sec * PSR), loop) : null; };
+    const pair = (set, m, sec, cents, loop) => { const l = note(set, m + cents / 100, sec, loop); return l ? [l, note(set, m - cents / 100, sec, loop)] : null; };
     const mono = (x, k) => toBuf([scale(x, k / peakOf(x))]);
     const duo = (l, r, k) => { const g = k / Math.max(peakOf(l), peakOf(r)); return toBuf([scale(l, g), scale(r, g)]); };
-    const LEAD = { violins: ['violin', 0], cellos: ['cello', -12], horn: ['french-horn', -12], vibes: ['vibraphone', 0] };
-    const ARP = { harp: 'concert-harp', marimba: 'marimba', piano: 'grand-piano', 'dan-tranh': 'dan-tranh' };
-    const HAND = { conga: ['perc-conga', ['lo', 'mid', 'hi']], bongo: ['perc-bongo', ['lo', 'lo', 'hi']], darbuka: ['perc-darbuka', ['doum', 'tek', 'ka']] };
-    /* what each part plays now its recordings are in (a stand-in named, and why) */
-    const ROLE = { pad: { strings: 'violin', harmonium: 'harmonium', organ: 'chapel-organ' }[C.pad], arp: ARP[C.arp], lead: (LEAD[C.lead] || LEAD.violins)[0], keys: C.keys, bass: C.bass, kick: 'kit-acoustic', hand: (HAND[C.hand] || HAND.conga)[0] };
-    tr.resolved = Object.fromEntries(Object.entries(ROLE).map(([k, set]) => { const got = setOf(set);
-      return [k, got === set ? { want: C[k], played: C[k], source: 'recordings' } : { want: C[k], played: got || 'silence', source: 'recordings', reason: (set || C[k]) + ' did not load' }]; }));
+    const piano = C.keys !== 'rhodes' ? C.keys : 'grand-piano';
+    /* a piano note, both sides a hair apart (or, without its recordings, the FM electric piano) */
+    const pianoNote = (m, sec, rel) => { const pr = pair(piano, m, sec, 3); if (!pr) return null; const n = pr[0].length, e = envOf(n, 0.002, sec - rel, rel); times(pr[0], e); times(pr[1], e); return pr; };
+    const fmKeys = (m, beats) => {
+      const A = P.keys, env = adsr(beats * BEATs, 0.003, A.decay, 0.35, 1.4), n = env.length, [L, R] = stereo(n);
+      [0.998, 1.002].forEach((det, c) => { const o = c ? R : L; for (let i = 0; i < n; i++) { const t = i / PSR, w = 2 * Math.PI * mtof(m) * det * t; o[i] = (Math.sin(w + (0.25 + A.index * Math.exp(-t / 0.3)) * Math.sin(w)) + Math.sin(w + 0.9 * Math.exp(-t / 0.15) * Math.sin(A.ratio * w)) * Math.exp(-t / 0.6) * A.bell) * env[i]; } });
+      return [L, R];
+    };
+    const synthPerc = (f) => { const n = Math.round(0.25 * PSR), tone = sine((i) => f * (1 + 0.5 * Math.exp(-i / PSR / 0.008)), n), tick = band(noiseOf(n, tr.seed ^ 7), 2000, 6000), x = new Float32Array(n); for (let i = 0; i < n; i++) { const t = i / PSR; x[i] = tone[i] * Math.exp(-t / 0.07) + tick[i] * Math.exp(-t / 0.004) * 0.2; } return x; };
+    /* what each part plays (for the page and the tests) */
+    tr.resolved = { keys: { want: C.keys, played: C.keys === 'rhodes' ? 'synth rhodes' : setOf(piano) || 'synth rhodes', source: C.keys === 'rhodes' || !setOf(piano) ? 'synth' : 'recordings' },
+      arp: { want: C.arp, played: C.arp, source: C.arp === 'piano' ? 'recordings' : 'synth' }, lead: { want: C.lead, played: C.lead, source: C.lead === 'piano' ? 'recordings' : 'synth' },
+      strings: { want: C.strings, played: C.strings && !!setOf('violin'), source: 'recordings' }, pad: { played: 'supersaw', source: 'synth' }, bass: { played: P.bass.kind, source: 'synth' }, drums: { played: 'synth kick/clap/hats, recorded ride/crash/shaker', source: 'mixed' } };
     const S = {
-      /* the acoustic kick, tightened, a timpani far down under it for the floor */
+      /* the drum machine's kick: a sine falling from a punch, a click on it, driven */
       kick: () => once('kick', () => {
-        const n = Math.round(0.42 * PSR), k = hitOf('kit-acoustic', C.kick, 0, 0.42), sub = hitOf('perc-timpani', 'lo', -9, 0.42);
-        biquad(sub, 'lp', 140); times(sub, envOf(n, 0.001, 0.05, 0.25 * (P.kick.decay / 0.13)));
-        times(k, envOf(n, 0.0005, 0.12, 0.2)); biquad(k, 'hp', 35);
-        const x = mixIn(scale(k, 1 / peakOf(k)), sub, 0.7 / peakOf(sub));
-        for (let i = 0; i < n; i++) x[i] = Math.tanh(1.6 * x[i]) / Math.tanh(1.6);
+        const K = P.kick, n = Math.round(0.42 * PSR), x = new Float32Array(n);
+        const body = sine((i) => K.f0 + K.sweep * Math.exp(-i / PSR / K.punch) + 35 * Math.exp(-i / PSR / 0.1), n), click = hp4(noiseOf(n, tr.seed ^ 1), 1500);
+        for (let i = 0; i < n; i++) { const t = i / PSR, amp = t < 0.05 ? 1 : Math.exp(-(t - 0.05) / K.decay); x[i] = Math.tanh(K.drive * (body[i] * amp + click[i] * Math.exp(-t / 0.0025) * K.click)) / Math.tanh(K.drive) * Math.min(1, (n - i) / (0.01 * PSR)); }
+        return toBuf([x]);
+      }),
+      /* the clap: three hands a hair apart and the room after them (or a snare under it); some records real claps */
+      clap: () => once('clap', () => {
+        if (C.clap === 'recorded' && setOf('perc-claps')) return mono(hitOf('perc-claps', 'a', 0, 0.4), 1);
+        const n = Math.round(0.4 * PSR), x = band(noiseOf(n, tr.seed ^ 2), 900, 3200);
+        if (P.clap === 'snareclap') { const b = sine((i) => 190 * (1 + 0.6 * Math.exp(-i / PSR / 0.01)), n); for (let i = 0; i < n; i++) { const t = i / PSR; x[i] = Math.tanh(1.4 * (x[i] * Math.exp(-t / 0.11) + b[i] * Math.exp(-t / 0.05) * 0.6)); } }
+        else for (let i = 0; i < n; i++) { const t = i / PSR; let e = 0; [0, 0.010, 0.021].forEach((o) => { if (t >= o) e += Math.exp(-(t - o) / 0.0045); }); if (t >= 0.025) e += 0.7 * Math.exp(-(t - 0.025) / 0.08) * Math.min(1, (t - 0.025) / 0.003); x[i] *= e; }
         return mono(x, 1);
       }),
-      clap: () => once('clap', () => mono(hitOf('perc-claps', P.clap === 'snareclap' ? 'b' : 'a', 0, 0.4), 1)),
-      hat: (d) => once('hat' + d, () => { const n = Math.round(Math.min(0.6, d * 7) * PSR), x = hitOf('kit-acoustic', 'hatC', 0, n / PSR); biquad(x, 'hp', P.hatHp * 0.8); times(x, envOf(n, 0.0005, 0.01, d * 4)); return mono(x, 1); }),
+      /* the machine's hats: noise and a metallic ring, high-passed */
+      hat: (decay) => once('hat' + decay, () => {
+        const n = Math.round(Math.min(0.6, decay * 7) * PSR), nz = noiseOf(n, tr.seed ^ 21), m = metal(n, 1), x = new Float32Array(n);
+        for (let i = 0; i < n; i++) x[i] = 0.6 * nz[i] + 0.5 * m[i];
+        hp4(x, P.hatHp);
+        for (let i = 0; i < n; i++) { const t = i / PSR; x[i] *= Math.exp(-t / decay) * Math.min(1, t / 0.0008); }
+        return mono(x, 1);
+      }),
+      openHat: () => once('openhat', () => { const b = S.hat(0.22), x = b.getChannelData(0).slice(); return toBuf([x]); }),
+      /* real cymbals and a real shaker */
       ride: () => once('ride', () => mono(hitOf('kit-acoustic', 'ride', 0, 0.9), 1)),
-      openHat: () => once('openhat', () => mono(hitOf('kit-acoustic', 'hatO', 0, 0.5), 1)),
-      tom: (w) => once('tom' + w, () => mono(hitOf('kit-acoustic', w === 'hi' ? 'tomHi' : 'tomLo', 0, 0.5), 1)),
       shaker: () => once('shaker', () => mono(hitOf('perc-shaker', 'down', 0, 0.12), 1)),
-      perc: (f) => once('perc' + f, () => { const [set, nm] = HAND[C.hand] || HAND.conga; return mono(hitOf(set, f > 600 ? nm[2] : f > 480 ? nm[1] : nm[0], 0, 0.3), 1); }),
-      snare: (tone) => once('sn' + tone, () => mono(hitOf('kit-acoustic', 'snare', 12 * Math.log2(tone / 200), 0.3), 1)),
       crash: (len) => once('cr' + len, () => { const n = Math.round(len * PSR), l = hitOf('kit-acoustic', 'crash', 0, len), r = hitOf('kit-acoustic', 'crash', 0.08, len), e = envOf(n, 0.001, 0.01, len); times(l, e); times(r, e); return duo(l, r, 1); }),
       revCrash: (len) => once('rc' + len, () => { const b = S.crash(Math.max(len, 1)), n = Math.round(len * PSR); return toBuf([0, 1].map((c) => b.getChannelData(c).slice().reverse().slice(-n))); }),
-      impact: () => once('imp', () => { const n = Math.round(2.5 * PSR), t = hitOf('perc-timpani', 'lo', -5, 2.5), k = hitOf('kit-acoustic', 'kick2', -3, 2.5); biquad(t, 'lp', 400); const x = mixIn(scale(t, 1 / peakOf(t)), k, 0.6 / peakOf(k)); times(x, envOf(n, 0.001, 0.05, 2)); return mono(x, 1); }),
-      /* a ride cymbal slowed and swept through a band: up into a section, down out of one */
-      sweep: (bars, f0, f1, up, seed) => once('sw' + bars + f0, () => {
-        const n = Math.round(bars * BARs * PSR), ride = setOf('kit-acoustic') && SM[setOf('kit-acoustic')].ride;
-        const chs = [0, 0.13].map((d) => { const x = read(ride, -12 + d, n, true); biquad(x, 'bp', (i) => f0 * Math.pow(f1 / f0, up ? Math.pow(i / n, 1.3) : i / n), 1.2); for (let i = 0; i < n; i++) { const u = i / n; x[i] *= up ? u * u : Math.min(1, u / 0.01) * (1 - u) * (1 - u); } return x; });
+      /* percussion: a tuned synth tom-tick, or real congas */
+      perc: (f) => once('perc' + f, () => (C.hand === 'conga' && setOf('perc-conga') ? mono(hitOf('perc-conga', f > 600 ? 'hi' : f > 480 ? 'mid' : 'lo', 0, 0.3), 1) : mono(synthPerc(f), 1))),
+      snare: (tone) => once('sn' + tone, () => {
+        const n = Math.round(0.3 * PSR), body = sine((i) => tone * (1 + 0.6 * Math.exp(-i / PSR / 0.01)), n), sn = band(noiseOf(n, tr.seed ^ 8), 1500, 8000), x = new Float32Array(n);
+        for (let i = 0; i < n; i++) { const t = i / PSR; x[i] = Math.tanh(1.5 * (body[i] * Math.exp(-t / 0.06) * 0.7 + sn[i] * Math.exp(-t / 0.1))); }
+        return mono(x, 1);
+      }),
+      tom: (w) => once('tom' + w, () => { const f0 = w === 'hi' ? 165 : 110, n = Math.round(0.4 * PSR), x = sine((i) => f0 * (1 + 0.7 * Math.exp(-i / PSR / 0.02)), n), nz = band(noiseOf(n, tr.seed ^ 9), 400, 3000); for (let i = 0; i < n; i++) { const t = i / PSR; x[i] = x[i] * Math.exp(-t / 0.16) + nz[i] * Math.exp(-t / 0.02) * 0.25; } return mono(x, 1); }),
+      impact: () => once('imp', () => {
+        const n = Math.round(2.5 * PSR), boom = sine((i) => 32 + 45 * Math.exp(-i / PSR / 0.25), n), thud = biquad(noiseOf(n, tr.seed ^ 11), 'lp', 250), x = new Float32Array(n);
+        for (let i = 0; i < n; i++) { const t = i / PSR; x[i] = Math.tanh(1.6 * (boom[i] * Math.exp(-t / 0.7) + thud[i] * Math.exp(-t / 0.25) * 2)) * Math.min(1, (n - i) / (0.05 * PSR)); }
+        return mono(x, 1);
+      }),
+      /* the sweeps and the riser: noise through a moving band, a saw climbing under the riser */
+      sweep: (bars, f0, f1, up, seed) => once('sw' + bars + f0 + f1 + seed, () => {
+        const n = Math.round(bars * BARs * PSR), chs = [0, 1].map((c) => { const x = noiseOf(n, tr.seed ^ seed ^ c * 77); biquad(x, 'bp', (i) => f0 * Math.pow(f1 / f0, up ? Math.pow(i / n, 1.3) : i / n), 1.2); for (let i = 0; i < n; i++) { const u = i / n; x[i] *= up ? u * u : Math.min(1, u / 0.01) * (1 - u) * (1 - u); } return x; });
         return duo(chs[0], chs[1], 1);
       }),
-      /* the riser: violins gliding up two octaves over a timpani roll swelling, a cymbal opening on top */
       riser: (bars) => once('ris' + bars, () => {
-        const n = Math.round(bars * BARs * PSR), m0 = 69 + tr.key, glide = (i) => Math.pow(2, 2 * Math.pow(i / n, 1.5)), v = nearest('violin', m0);
-        const vl = v ? read(v[0], v[1] + 0.08, n, true, glide) : new Float32Array(n), vr = v ? read(v[0], v[1] - 0.08, n, true, glide) : new Float32Array(n);
-        const ts = setOf('perc-timpani'), tm = read(ts && SM[ts].roll, 0, n, true), ks = setOf('kit-acoustic'), cy = read(ks && SM[ks].ride, -12, n, true);
-        biquad(cy, 'hp', (i) => 300 * Math.pow(25, Math.pow(i / n, 1.3)));
-        const L = new Float32Array(n), R = new Float32Array(n);
-        for (let i = 0; i < n; i++) { const u = i / n, g = u * u; L[i] = (vl[i] * 0.5 + tm[i] * 0.4 + cy[i] * 0.3) * g; R[i] = (vr[i] * 0.5 + tm[i] * 0.4 + cy[i] * 0.3) * g; }
-        return duo(L, R, 1);
+        const n = Math.round(bars * BARs * PSR), cut = (i) => 300 * Math.pow(30, Math.pow(i / n, 1.3));
+        const tone = biquad(saw((i) => mtof(57 + tr.key) * Math.pow(2, 2 * Math.pow(i / n, 1.5)), n), 'lp', cut);
+        const chs = [0, 1].map((c) => { const x = biquad(noiseOf(n, tr.seed ^ 12 ^ c * 91), 'bp', cut, 1.2); for (let i = 0; i < n; i++) { const u = i / n; x[i] = x[i] * u * u + 0.25 * tone[i] * u * u; } return x; });
+        return duo(chs[0], chs[1], 1);
       }),
-      /* the air: a low cello and a harmonium held, darkened, breathing */
       atmos: (bars, seed) => once('at' + bars + seed, () => {
-        const n = Math.round(bars * BARs * PSR), m = 45 + tr.key, [l, r] = pair('cello', m, n / PSR, 8, true), h = note('harmonium', m + 12, n / PSR, true);
-        mixIn(l, h, 0.5); mixIn(r, h, 0.5);
-        [l, r].forEach((x) => { biquad(x, 'lp', (i) => 700 * Math.pow(2, Math.sin(2 * Math.PI * (i / n) * 2))); for (let i = 0; i < n; i++) { const u = i / n; x[i] *= Math.min(1, u / 0.25) * Math.min(1, (1 - u) / 0.25); } });
-        const k = 0.25 / Math.max(rmsOf(l), rmsOf(r)); return toBuf([scale(l, k), scale(r, k)]);
+        const n = Math.round(bars * BARs * PSR), chs = [0, 1].map((c) => { const x = biquad(noiseOf(n, tr.seed ^ seed ^ c * 13), 'lp', (i) => 900 * Math.pow(2, Math.sin(2 * Math.PI * (i / n) * 2)), 1.5); for (let i = 0; i < n; i++) { const u = i / n; x[i] *= Math.min(1, u / 0.25) * Math.min(1, (1 - u) / 0.25); } return x; });
+        const k = 0.25 / Math.max(rmsOf(chs[0]), rmsOf(chs[1])); return toBuf(chs.map((x) => scale(x, k)));
       }),
-      /* the pad: the chord on the record's pad recordings, each note two players a few cents apart, held */
+      /* the pad: a chord of supersaws, held for its chord's length */
       pad: (notes, bars) => once('pad' + notes.join(',') + 'x' + bars, () => {
-        const sec = bars * BARs + 1.8, n = Math.round(sec * PSR), L = new Float32Array(n), R = new Float32Array(n), cents = 6 + P.pad.cents / 3;
-        notes.forEach((m) => {
-          const lay = C.pad === 'organ' ? [['chapel-organ', 1], [m < 55 ? 'cello' : 'violin', 0.3]] : C.pad === 'harmonium' ? [['harmonium', 1], ['cello', m < 60 ? 0.5 : 0]] : [[m < 55 ? 'cello' : 'violin', 1], ['harmonium', 0.4]];
-          lay.forEach(([set, g]) => { if (!g) return; const [l, r] = pair(set, m, sec, cents, true); mixIn(L, l, g); mixIn(R, r, g); });
-        });
-        const e = envOf(n, P.pad.attack, bars * BARs, 1.8); times(L, e); times(R, e);
+        const A = P.pad, env = adsr(bars * BARs, A.attack, 0.8, 0.85, 1.8), n = env.length, [L, R] = stereo(n);
+        notes.forEach((m) => { const [l, r] = supersaw(m, n, A.voices, A.cents, A.width, tr.seed ^ (100 + m), null, A.wave); for (let i = 0; i < n; i++) { L[i] += l[i] * env[i]; R[i] += r[i] * env[i]; } });
         const k = 0.0625 / Math.max(rmsOf(L, Math.round(BARs * PSR)), 1e-6); return toBuf([scale(L, k), scale(R, k)]);
       }),
-      /* the arpeggio's pluck: the record's plucked or struck instrument, short */
-      pluck: (m) => once('pl' + m, () => { const n = Math.round((BEATs / 4 * 0.85 + 0.25) * PSR), [l, r] = pair(ARP[C.arp] || 'concert-harp', m, n / PSR, 4), e = envOf(n, 0.001, BEATs / 4 * 0.85, 0.2 * (P.pluck.decay / 0.12)); times(l, e); times(r, e); return duo(l, r, 0.5); }),
-      bass: (m, beats) => once('b' + m + 'x' + beats, () => { const n = Math.round((beats * BEATs + 0.03) * PSR), x = note(C.bass, m + 12, n / PSR); times(x, envOf(n, 0.003, beats * BEATs, 0.03)); return mono(x, 0.6); }),
-      /* the lead: a section on the hook (three players a few cents apart), celli under the violins */
+      /* real strings under the pad, in the breakdowns: violins (celli below), two players a side, held */
+      strings: (notes, bars) => once('str' + notes.join(',') + 'x' + bars, () => {
+        const sec = bars * BARs + 1.8, n = Math.round(sec * PSR), L = new Float32Array(n), R = new Float32Array(n);
+        notes.forEach((m) => { const pr = pair(m < 55 ? 'cello' : 'violin', m, sec, 9, true); if (pr) { mixIn(L, pr[0]); mixIn(R, pr[1]); } });
+        const e = envOf(n, 0.6, bars * BARs, 1.8); times(L, e); times(R, e);
+        const k = 0.0625 / Math.max(rmsOf(L, Math.round(BARs * PSR)), 1e-6); return toBuf([scale(L, k), scale(R, k)]);
+      }),
+      /* the arpeggio: a synth pluck (saws a few cents apart, decaying fast), or the piano, or an FM bell */
+      pluck: (m) => once('pl' + m, () => {
+        const A = P.pluck;
+        if (C.arp === 'piano') { const pr = pianoNote(m, BEATs / 4 * 0.85 + 0.35, 0.3); if (pr) return duo(pr[0], pr[1], 0.22); }      // (a struck note rings fuller than a pluck: brought to its level)
+        if (C.arp === 'bell') { const n = Math.round((BEATs / 4 + 0.4) * PSR), [L, R] = stereo(n); for (let i = 0; i < n; i++) { const t = i / PSR, w = 2 * Math.PI * mtof(m) * t, y = Math.sin(w + 2 * Math.exp(-t / 0.08) * Math.sin(3.5 * w)) * Math.exp(-t / (A.decay * 2)); L[i] = y; R[i] = y; } return duo(L, R, 0.22); }
+        const env = adsr(BEATs / 4 * 0.85, 0.002, A.decay, 0, 0.06), n = env.length, [L, R] = supersaw(m, n, A.voices, A.cents, 0.6, tr.seed ^ (200 + m), null, A.wave);
+        if (A.octave) { const [l2, r2] = supersaw(m + 12, n, 2, A.cents, 0.4, tr.seed ^ (260 + m)); for (let i = 0; i < n; i++) { L[i] += 0.4 * l2[i]; R[i] += 0.4 * r2[i]; } }
+        times(L, env); times(R, env); return duo(L, R, 0.5);
+      }),
+      /* the bass: a sine under a saw (or a square, or two saws apart: a reese) */
+      bass: (m, beats) => once('b' + m + 'x' + beats, () => {
+        const A = P.bass, env = adsr(beats * BEATs, 0.003, A.decay, A.sustain, 0.02), n = env.length, x = new Float32Array(n);
+        const s1 = sine(mtof(m), n), top = A.kind === 'square' ? square(mtof(m + 12), n, 0.1, 0.35) : saw(mtof(m + 12), n, 0.2), top2 = A.kind === 'reese' ? saw(mtof(m + 12) * 1.012, n, 0.6) : null;
+        for (let i = 0; i < n; i++) x[i] = (0.55 * top[i] + (top2 ? 0.45 * top2[i] : 0) + 0.9 * s1[i]) * env[i];
+        return mono(x, 0.6);
+      }),
+      /* the lead: a supersaw with a late vibrato, a saw lead, a bright pluck lead, or the piano */
       lead: (m, beats) => once('ld' + m + 'x' + beats, () => {
-        const [set, oct] = LEAD[C.lead] || LEAD.violins, sec = beats * BEATs + 0.5, n = Math.round(sec * PSR), hold = set !== 'vibraphone';
-        const [l, r] = pair(set, m + oct, sec, hold ? 9 : 3, hold), c = note(set, m + oct, sec, hold);
-        mixIn(l, c, 0.7); mixIn(r, c, 0.7);
-        if (set === 'violin') { const lo = note('cello', m - 12, sec, true); mixIn(l, lo, 0.3); mixIn(r, lo, 0.3); }
-        if (set === 'vibraphone') { const pn = note('grand-piano', m, sec); mixIn(l, pn, 0.5); mixIn(r, pn, 0.5); }
-        const e = envOf(n, hold ? 0.05 + P.lead.attack : 0.002, beats * BEATs, hold ? 0.4 : 1.2); times(l, e); times(r, e);
-        return duo(l, r, 0.5);
+        const A = P.lead;
+        if (C.lead === 'piano') { const pr = pianoNote(m, beats * BEATs + 1.2, 1.2); if (pr) return duo(pr[0], pr[1], 0.5); }
+        const pl = C.lead === 'pluck', env = pl ? adsr(beats * BEATs, 0.003, 0.3, 0.15, 0.4) : adsr(beats * BEATs, A.attack, 0.25, 0.7, 0.35), n = env.length;
+        const vib = (i) => { const t = i / PSR; return 1 + A.vibDepth * Math.sin(2 * Math.PI * A.vibRate * t) * Math.min(1, Math.max(0, (t - 0.18) / 0.3)); };
+        let L, R;
+        if (C.lead === 'sawlead') { L = saw((i) => mtof(m) * vib(i), n, 0); R = saw((i) => mtof(m) * 1.005 * vib(i), n, 0.4); biquad(L, 'lp', 3600, 1.2); biquad(R, 'lp', 3600, 1.2); }
+        else { [L, R] = supersaw(m, n, A.voices, A.cents, 0.8, tr.seed ^ (300 + m), pl ? null : vib); const sub = saw((i) => mtof(m - 12) * (pl ? 1 : vib(i)), n, 0.3); for (let i = 0; i < n; i++) { L[i] += 0.35 * sub[i]; R[i] += 0.35 * sub[i]; } }
+        times(L, env); times(R, env); return duo(L, R, 0.5);
       }),
-      /* the counter-melody: held notes on the section the lead is not (celli under violins, violins over the others) */
+      /* the keys: the piano (grand or upright), or an FM electric piano */
+      keys: (m, beats) => once('k' + m + 'x' + beats, () => {
+        /* (each kind measured and brought to one loudness: the FM piano rings 6 dB over the grand, the upright 2.5 under it) */
+        if (C.keys !== 'rhodes') { const pr = pianoNote(m, beats * BEATs + 1.4, 1.4); if (pr) return duo(pr[0], pr[1], C.keys === 'upright-piano' ? 0.53 : 0.4); }
+        const [L, R] = fmKeys(m, beats); return duo(L, R, 0.25);
+      }),
+      /* the counter-melody: a string machine - saws a little apart, slow to speak, darkened */
       counter: (m, beats) => once('ct' + m + 'x' + beats, () => {
-        const set = C.lead === 'violins' || C.lead === 'vibes' ? 'cello' : 'violin', sec = beats * BEATs + 1, n = Math.round(sec * PSR), [l, r] = pair(set, m, sec, 7, true), e = envOf(n, 0.3, beats * BEATs, 1);
-        times(l, e); times(r, e); return duo(l, r, 0.5);
+        const env = adsr(beats * BEATs, 0.35, 0.6, 0.85, 1), n = env.length, [L, R] = supersaw(m, n, 5, 20, 0.7, tr.seed ^ (400 + m));
+        biquad(L, 'lp', 2500); biquad(R, 'lp', 2500); times(L, env); times(R, env); return duo(L, R, 0.5);
       }),
-      keys: (m, beats) => once('k' + m + 'x' + beats, () => { const sec = beats * BEATs + 1.4, n = Math.round(sec * PSR), [l, r] = pair(C.keys, m, sec, 3), e = envOf(n, 0.002, beats * BEATs, 1.4); times(l, e); times(r, e); return duo(l, r, 0.5); }),
-      /* the hall and the room: noise darkening as it decays (a space's response - processing, not a sound) */
+      /* the hall and the room: noise darkening as it decays (a space's response) */
       ir: (len, pre, bright, dark, seed) => once('ir' + len + seed, () => {
         const n = Math.round(len * PSR), p = Math.round(pre * PSR);
-        return toBuf([0, 1].map((c) => {
-          const x = biquad(noiseOf(n, seed ^ c * 101), 'lp', (i) => bright * Math.pow(dark / bright, i / n));
-          let e = 0; for (let i = 0; i < n; i++) { const t = i / PSR; x[i] *= Math.exp(-6.9 * t / len) * Math.min(1, t / 0.012); e += x[i] * x[i]; }
-          const o = new Float32Array(n + p); o.set(scale(x, 1 / Math.sqrt(e)), p); return o;
-        }));
+        return toBuf([0, 1].map((c) => { const x = biquad(noiseOf(n, seed ^ c * 101), 'lp', (i) => bright * Math.pow(dark / bright, i / n)); let e = 0; for (let i = 0; i < n; i++) { const t = i / PSR; x[i] *= Math.exp(-6.9 * t / len) * Math.min(1, t / 0.012); e += x[i] * x[i]; } const o = new Float32Array(n + p); o.set(scale(x, 1 / Math.sqrt(e)), p); return o; }));
       })
     };
     return S;
@@ -1784,7 +1881,8 @@ window.VinylPlayer.Generative = (() => {
     const chain = (...ns) => { for (let i = 1; i < ns.length; i++) ns[i - 1].connect(ns[i]); return ns[ns.length - 1]; };
     const out = G(1); out.connect(ctx.destination);
     const glue = ctx.createDynamicsCompressor(); glue.threshold.value = -16; glue.ratio.value = 2; glue.knee.value = 6; glue.attack.value = 0.03; glue.release.value = 0.2;
-    const master = G(tr.progGain || 1);
+    /* (the master set so a drop lands near -13 dB rms, beside the other styles, with the limiter only catching peaks) */
+    const master = G((tr.progGain || 1) * 0.72);
     /* the lows kept mono: the side channel high-passed at 140 Hz */
     const msIn = G(1), split = ctx.createChannelSplitter(2), merge = ctx.createChannelMerger(2);
     msIn.connect(split);
@@ -1826,7 +1924,7 @@ window.VinylPlayer.Generative = (() => {
       kick: part(rest, lv('kick'), null, kickF), clap: part(rest, lv('clap'), { room: 0.3 }), hats: part(rest, lv('hats'), { room: 0.08 }),
       shaker: part(rest, lv('shaker')), ride: part(rest, lv('ride')), perc: part(rest, lv('perc'), { hall: 0.2, delay: 0.35 }), snare: part(rest, lv('snare'), { room: 0.3 }, snareF),
       bass: part(rest, lv('bass'), null, bassF), pad: part(music, lv('pad'), { hall: 0.35 }, padF), arp: part(music, lv('arp'), { hall: 0.25, delay: 0.3 }, arpF),
-      lead: part(music, lv('lead'), { hall: 0.3, delay: 0.22 }, leadF), counter: part(music, lv('counter'), { hall: 0.35 }), keys: part(music, lv('keys'), { hall: 0.5, delay: 0.3 }, keysF), atmos: part(rest, lv('atmos'), { hall: 0.4 }),
+      lead: part(music, lv('lead'), { hall: 0.3, delay: 0.22 }, leadF), strings: part(music, lv('strings'), { hall: 0.45 }), counter: part(music, lv('counter'), { hall: 0.35 }), keys: part(music, lv('keys'), { hall: 0.5, delay: 0.3 }, keysF), atmos: part(rest, lv('atmos'), { hall: 0.4 }),
       crash: part(rest, lv('crash'), { hall: 0.3 }), impact: part(tail, lv('impact'), { hall: 0.3 }), revcym: part(tail, lv('revcym')), sweeps: part(rest, lv('sweeps')), riser: part(tail, lv('riser'))
     };
     /* the gate (the build's chopped chords) sits between the pad's duck and its output */
@@ -1862,7 +1960,7 @@ window.VinylPlayer.Generative = (() => {
       return st;
     };
     const duckCurve = (depth, Lb) => { const n = 96, c = new Float32Array(n); for (let k = 0; k < n; k++) { const u = k / (n - 1), a = Math.min(1, u * Lb * BEATs / 0.003); c[k] = 1 - depth * a * 0.5 * (1 + Math.cos(Math.PI * u)); } c[n - 1] = 1; return c; };
-    const DUCKS = [[p.bass.duck, duckCurve(0.6, 0.5), 0.5], [p.pad.duck, duckCurve(0.55, 0.75), 0.75], [p.arp.duck, duckCurve(0.4, 0.75), 0.75], [p.lead.duck, duckCurve(0.35, 0.75), 0.75], [p.counter.duck, duckCurve(0.35, 0.75), 0.75], [hallDuck, duckCurve(0.45, 0.75), 0.75]];
+    const DUCKS = [[p.bass.duck, duckCurve(0.6, 0.5), 0.5], [p.pad.duck, duckCurve(0.55, 0.75), 0.75], [p.arp.duck, duckCurve(0.4, 0.75), 0.75], [p.lead.duck, duckCurve(0.35, 0.75), 0.75], [p.counter.duck, duckCurve(0.35, 0.75), 0.75], [p.strings.duck, duckCurve(0.4, 0.75), 0.75], [hallDuck, duckCurve(0.45, 0.75), 0.75]];
     const rnd = (bar, salt) => seeded((tr.seed ^ Math.imul(bar + 1, 0x9E3779B1) ^ salt) >>> 0);
     const hook = tr.progHook;
     const tonic = 69 + tr.key, sc = SCALES[tr.scale] || SCALES.minor, mel = (d) => tonic + sc[((d % 7) + 7) % 7] + 12 * Math.floor(d / 7);
@@ -1958,7 +2056,11 @@ window.VinylPlayer.Generative = (() => {
         if (toDrop && k === L - 2) play(S.revCrash(2 * BARs), bar * 4, 1, p.revcym);
       }
       /* the pad, the counter-melody, the air: held, so they may reach back before the segment */
-      if (onIn(sec, 'pad', k) && bar % PL.chordBars === 0) play(S.pad(ch.notes, PL.chordBars), bar * 4, 1, p.pad);
+      if (onIn(sec, 'pad', k) && bar % PL.chordBars === 0) {
+        play(S.pad(ch.notes, PL.chordBars), bar * 4, 1, p.pad);
+        /* (real strings under it in the breakdowns, where the record has them) */
+        if (P.rec.strings && sec.name === 'breakdown') play(S.strings(ch.notes, PL.chordBars), bar * 4, 1, p.strings);
+      }
       if (onIn(sec, 'counter', k)) {
         const cyc = PL.chordBars * PL.H.length, pos = ((bar % cyc) + cyc) % cyc;
         PL.counter.forEach(([bt, len, m]) => { if (Math.floor(bt / 4) === pos) play(S.counter(m, len * 0.95), bar * 4 + (bt - pos * 4), 0.9, p.counter); });
@@ -2005,9 +2107,9 @@ window.VinylPlayer.Generative = (() => {
      balance, as a mix engineer's faders): measured part by part in a drop,
      over five records with different recordings, to a reference mix's balance (kick -13 dB rms,
      bass -17, pad -21, lead -19, arp -24, clap -10 peak, hats -16 ...) */
-  const PROG_LEVELS = { counter: 0.3, kick: 0.924, clap: 0.196, hats: 0.114, shaker: 0.0513, ride: 0.0716, perc: 0.0793, snare: 0.157,
-    bass: 0.698, pad: 0.803, arp: 0.288, lead: 0.524, keys: 0.428, atmos: 0.0793, crash: 0.264, impact: 0.402,
-    revcym: 0.228, sweeps: 0.167, riser: 0.312 };
+  const PROG_LEVELS = { strings: 0.5, counter: 0.318, kick: 0.491, clap: 0.196, hats: 0.114, shaker: 0.0513, ride: 0.0716, perc: 0.087,
+    snare: 0.0815, bass: 0.517, pad: 0.88, arp: 0.338, lead: 0.623, keys: 0.428, atmos: 0.0683, crash: 0.264,
+    impact: 0.35, revcym: 0.228, sweeps: 0.167, riser: 0.446 };
   /* the curves: for each section, where each filter and level starts and
      ends (and turns, in between), at bars; a section's start may jump from
      where the last one ended */

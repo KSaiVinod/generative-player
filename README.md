@@ -181,10 +181,11 @@ The element sizes itself from its own width, so to make it bigger or smaller, gi
   - There is one main transition effect and at most one supporting effect, and often none.
   - The breath before the drop is either true silence (the reverb and echo returns are cut too) or keeps one effect's tail.
   - The drop opens with a crash, a boom, an impact, a crash with an impact, or a clean cut, then pays off the concept.
-- **Progressive house is made like an organic progressive record, from recordings only.**
-  - **Sources:** strings, harmonium or organ become the pads; a harp, marimba, piano or đàn tranh plays the arpeggio through a filter that snaps on each note; the acoustic kick sits over a timpani tuned far down for sub; a violin, cello or horn section, or vibraphone with piano, carries the hook.
-  - **Production:** it has its own renderer at 44.1 kHz, with smooth filter curves across the whole arrangement, each part ducking under the kick by its own amount, a hall, a room and an echo, and a look-ahead limiter.
-  - **Variety:** each record picks its own recordings for every part.
+- **Progressive house uses the genre's own sounds.**
+  - **Synthesised:** supersaw pads, a synth pluck whose filter snaps on each note, a sub-and-saw (or reese, or square) bass, a supersaw, saw or pluck lead, a drum machine's kick, clap and hats, and noise risers and sweeps.
+  - **Recorded:** used only where progressive uses them: a piano for the keys (sometimes the hook or the arpeggio), real strings under the pad in breakdowns, a shaker, a ride and a crash, and sometimes real claps or congas.
+  - **Production:** it has its own renderer at 44.1 kHz, with smooth filter curves, each part ducking under the kick by its own amount, a hall, a room and an echo, and a look-ahead limiter.
+  - **Variety:** each record draws its own sound for every part: voices, detune, waves, filter bite, kick tone, which lead and which keys.
   - **Structure:** each record writes its own plan. It picks one of five song forms (classic, early drop, one long breakdown, bridge, groove-led), and each section is arranged its own way, with parts entering and leaving in their own order. Patterns run two bars or longer: arpeggio variations, eight bass lines with turnarounds, hat, clap and percussion patterns, and a fill library. The harmony uses 2, 4 or 8 chords at 1, 2 or 4 bars each, with re-harmonised breakdowns. The hook has its own plan and shape, and a guide-tone counter-melody joins in later drops. Across 300 records, no two shared a section plan.
 - **The next record is chosen against the last four.** It avoids the same lead family, motif rhythm, contour, progression, build concepts and style. The key is not penalised.
 
