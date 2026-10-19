@@ -127,6 +127,23 @@
     on('stop', () => el.stop());
   }
 
+  /* iPhone Safari (and every iOS browser, all WebKit) taps back only for a
+     real finger on a real switch, never for one flicked from code. So on an
+     iPhone each button the deck has carries a switch over its whole face,
+     invisible: the finger lands on it, the phone taps back, and the click
+     goes on up to the button as before. tapBack(button) does it for a
+     page's own buttons too. */
+  const IOS_TAPS = !navigator.vibrate && coarse.matches;
+  function tapBack(btn) {
+    if (!IOS_TAPS || !btn || btn.querySelector(':scope > .vp-tap')) return;
+    const i = document.createElement('input');
+    i.type = 'checkbox'; i.setAttribute('switch', ''); i.className = 'vp-tap';
+    i.tabIndex = -1; i.setAttribute('aria-hidden', 'true');
+    if (getComputedStyle(btn).position === 'static') btn.style.position = 'relative';
+    btn.appendChild(i);
+  }
+  VP.tapBack = tapBack;
+
   let uid = 0;
   const ARM_SVG = (u) => `
     <svg class="vp-arm-svg" viewBox="0 0 520 620" aria-hidden="true" focusable="false">
@@ -701,6 +718,7 @@
 
       /* START·STOP does what a tap on the record does */
       if (p.start) p.start.addEventListener('click', () => { this._tick(true); this.toggle(); });
+      this.querySelectorAll('.vp-key').forEach(tapBack);
       if (p.like) p.like.addEventListener('click', () => {
         if (p.like.getAttribute('aria-pressed') === 'true' || !this._source || !this._source.like) { this.feel(false); return; }
         if (this._source.like()) { p.like.setAttribute('aria-pressed', 'true'); this.feel(true); this._emit('vp-like'); }

@@ -331,3 +331,7 @@ vinyl-player.is-win .vp-key--start::after,vinyl-player.is-win .vp-rpmtag{font-si
 .vp-turn__sub{margin:0;font-family:var(--vp-mono);font-size:.62rem;letter-spacing:.18em;text-transform:uppercase;color:var(--vp-dim);}
 @keyframes vp-turn{0%,20%{transform:rotate(-90deg);}55%,100%{transform:rotate(0deg);}}
 @media (prefers-reduced-motion:reduce){.vp-turn__phone{animation:none;transform:none;}}
+
+/* the iPhone's tap back: a real switch, invisible, over a button's face (vinyl-player.js tapBack) */
+.vp-tap{position:absolute;inset:0;width:100%;height:100%;margin:0;padding:0;border:0;opacity:0;
+  appearance:none;-webkit-appearance:none;cursor:inherit;-webkit-tap-highlight-color:transparent;z-index:1;}
