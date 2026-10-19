@@ -185,6 +185,7 @@ The element sizes itself from its own width, so to make it bigger or smaller, gi
   - **Sources:** strings, harmonium or organ become the pads; a harp, marimba, piano or đàn tranh plays the arpeggio through a filter that snaps on each note; the acoustic kick sits over a timpani tuned far down for sub; a violin, cello or horn section, or vibraphone with piano, carries the hook.
   - **Production:** it has its own renderer at 44.1 kHz, with smooth filter curves across the whole arrangement, each part ducking under the kick by its own amount, a hall, a room and an echo, and a look-ahead limiter.
   - **Variety:** each record picks its own recordings for every part.
+  - **Structure:** each record writes its own plan. It picks one of five song forms (classic, early drop, one long breakdown, bridge, groove-led), and each section is arranged its own way, with parts entering and leaving in their own order. Patterns run two bars or longer: arpeggio variations, eight bass lines with turnarounds, hat, clap and percussion patterns, and a fill library. The harmony uses 2, 4 or 8 chords at 1, 2 or 4 bars each, with re-harmonised breakdowns. The hook has its own plan and shape, and a guide-tone counter-melody joins in later drops. Across 300 records, no two shared a section plan.
 - **The next record is chosen against the last four.** It avoids the same lead family, motif rhythm, contour, progression, build concepts and style. The key is not penalised.
 
 ## Phones

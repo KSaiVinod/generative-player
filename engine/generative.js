@@ -402,23 +402,6 @@ window.VinylPlayer.Generative = (() => {
 
   /* the running order: a dance record builds and drops; lo-fi goes round
      like a song; dub techno unfolds slowly. A 45 is the short version. */
-  /* progressive house, the full length: six to eight and a half minutes at
-     its tempo (about 192-256 bars), two breakdowns and two builds, every
-     section long enough to develop rather than loop. Its own random
-     stream (q), so the rest of the track's choices stay where they were. */
-  function arrangeLong(bpm, q) {
-    const pick = (a) => a[Math.floor(q() * a.length)];
-    const lo = Math.max(192, Math.ceil(6 * bpm / 4 / 8) * 8), hi = Math.min(256, Math.floor(8.5 * bpm / 4 / 8) * 8);
-    const a = [['intro', pick([16, 16, 32])], ['groove', pick([32, 32, 48])], ['breakdown', pick([16, 16, 32])], ['build', 32],
-      ['drop', pick([32, 32, 48])], ['breakdown', 16], ['build', pick([16, 32, 32])], ['drop', pick([32, 48])], ['outro', pick([16, 16, 32])]];
-    /* never every maximum: the longest optional sections give way until it fits, and it is lengthened if short */
-    const total = () => a.reduce((n, x) => n + x[1], 0);
-    /* (each section's floor: intro 16, groove 32, breakdowns 16, the main build 32, drops 32, the second build 16, outro 16) */
-    const floor = [16, 32, 16, 32, 32, 16, 16, 32, 16], shrink = [2, 8, 0, 6, 4, 7, 1];
-    for (let i = 0; total() > hi && i < 40; i++) { const k = shrink[i % shrink.length]; if (a[k][1] - 16 >= floor[k]) a[k][1] -= 16; }
-    for (let i = 0; total() < lo && i < 10; i++) a[[1, 4, 7][i % 3]][1] += 16;
-    return a;
-  }
   function arrange(S, rpm, r) {
     let a;
     if (S.form === 'song') {
@@ -728,7 +711,8 @@ window.VinylPlayer.Generative = (() => {
     const q = seeded((seed ^ 0x7F4A7C15) >>> 0), qpick = (a) => a[Math.floor(q() * a.length)];
     /* progressive house is long whatever the speed it is pressed at: a 45
        plays faster, it is not cut shorter (a short edit only when asked for) */
-    if (style === 'prog' && edit !== 'short') arr = arrangeLong(bpm, q);
+    let progForm = null;
+    if (style === 'prog' && side !== 'b' && edit !== 'short') { progForm = writeProgForm(q, bpm); arr = progForm.arr; }
     const tr = {
       seed, style, label: S.label, side: side === 'b' ? 'b' : 'a', rpm: rpm === 45 ? 45 : 33,
       bpm, key: Math.floor(r() * 12) - 5, scale, prog: pick(PROGS[family]),
@@ -934,7 +918,14 @@ window.VinylPlayer.Generative = (() => {
     if (style === 'prog' && side !== 'b') {
       tr.engine = 'prog'; tr.sr = PSR; tr.bpc = 2;
       tr.patch = writeProgPatch(q);
+      tr.chords = writeProgChords(q, tr);
       tr.progHook = writeProgHook(q, tr);
+      const H = progHarmony(tr, tr.chords.degs);
+      tr.plan = { H, HB: progHarmony(tr, tr.chords.re), chordBars: tr.chords.bars, reharm: q() < 0.6, arps: writeProgArps(tr.patch.arp, q),
+        counter: writeProgCounter(q, H, tr.chords.bars), form: progForm ? progForm.id : 'short' };
+      tr.scripts = writeProgScripts(q, tr, progForm ? progForm.vars : tr.arr.map(() => null));
+      /* (for the critic: the hook as the ear has it) */
+      tr.mel = Object.assign({}, tr.mel, { rhythm: tr.progHook.plan + ':' + tr.progHook.hook.map((x) => x[1]).join(','), hook: tr.progHook.hook.map((x) => x[2]) });
       tr.leadVoice = 'prog:' + tr.patch.rec.lead;
       tr.samples = progSets(tr.patch);
       tr.resolved = Object.fromEntries(Object.entries(tr.patch.rec).map(([k, v]) => [k, { want: v, played: v, source: 'recordings' }]));
@@ -1395,6 +1386,8 @@ window.VinylPlayer.Generative = (() => {
       clap: () => once('clap', () => mono(hitOf('perc-claps', P.clap === 'snareclap' ? 'b' : 'a', 0, 0.4), 1)),
       hat: (d) => once('hat' + d, () => { const n = Math.round(Math.min(0.6, d * 7) * PSR), x = hitOf('kit-acoustic', 'hatC', 0, n / PSR); biquad(x, 'hp', P.hatHp * 0.8); times(x, envOf(n, 0.0005, 0.01, d * 4)); return mono(x, 1); }),
       ride: () => once('ride', () => mono(hitOf('kit-acoustic', 'ride', 0, 0.9), 1)),
+      openHat: () => once('openhat', () => mono(hitOf('kit-acoustic', 'hatO', 0, 0.5), 1)),
+      tom: (w) => once('tom' + w, () => mono(hitOf('kit-acoustic', w === 'hi' ? 'tomHi' : 'tomLo', 0, 0.5), 1)),
       shaker: () => once('shaker', () => mono(hitOf('perc-shaker', 'down', 0, 0.12), 1)),
       perc: (f) => once('perc' + f, () => { const [set, nm] = HAND[C.hand] || HAND.conga; return mono(hitOf(set, f > 600 ? nm[2] : f > 480 ? nm[1] : nm[0], 0, 0.3), 1); }),
       snare: (tone) => once('sn' + tone, () => mono(hitOf('kit-acoustic', 'snare', 12 * Math.log2(tone / 200), 0.3), 1)),
@@ -1447,6 +1440,11 @@ window.VinylPlayer.Generative = (() => {
         const e = envOf(n, hold ? 0.05 + P.lead.attack : 0.002, beats * BEATs, hold ? 0.4 : 1.2); times(l, e); times(r, e);
         return duo(l, r, 0.5);
       }),
+      /* the counter-melody: held notes on the section the lead is not (celli under violins, violins over the others) */
+      counter: (m, beats) => once('ct' + m + 'x' + beats, () => {
+        const set = C.lead === 'violins' || C.lead === 'vibes' ? 'cello' : 'violin', sec = beats * BEATs + 1, n = Math.round(sec * PSR), [l, r] = pair(set, m, sec, 7, true), e = envOf(n, 0.3, beats * BEATs, 1);
+        times(l, e); times(r, e); return duo(l, r, 0.5);
+      }),
       keys: (m, beats) => once('k' + m + 'x' + beats, () => { const sec = beats * BEATs + 1.4, n = Math.round(sec * PSR), [l, r] = pair(C.keys, m, sec, 3), e = envOf(n, 0.002, beats * BEATs, 1.4); times(l, e); times(r, e); return duo(l, r, 0.5); }),
       /* the hall and the room: noise darkening as it decays (a space's response - processing, not a sound) */
       ir: (len, pre, bright, dark, seed) => once('ir' + len + seed, () => {
@@ -1461,18 +1459,206 @@ window.VinylPlayer.Generative = (() => {
     return S;
   }
 
-  /* ---- this record's harmony and hook ----------------------------------------
-     The chords coloured as a producer voices them - a ninth on the minor
-     chords, a major seventh on the major ones that have it (a ninth on the
-     others) - led smoothly from one to the next; the arpeggio's tones; the
-     bass roots. The hook: eight bars, one motif rhythm coming back, rising
-     to a first peak, answering down, climbing to the record's highest note,
-     then home, held. Degrees of the scale, so any key and mode. */
-  function progHarmony(tr) {
+  /* ---- progressive house's plan -------------------------------------------
+     Everything a progressive record does is written here, once, from its
+     seed: its form (one of several), how each of its sections is arranged
+     (which parts play in which bars, and playing what), its patterns, its
+     harmony, its hook and the counter-melody - so no two records share a
+     shape, and the renderer only plays what the plan says. */
+  const PROG_FORMS = [
+    /* the classic: two breakdowns, two builds */
+    { id: 'classic', s: [['intro', [16, 32]], ['groove', [32, 48]], ['breakdown', [16, 32]], ['build', [32]], ['drop', [32, 48]], ['breakdown', [16]], ['build', [16, 32]], ['drop', [32, 48]], ['outro', [16, 32]]] },
+    /* an early, smaller drop; then the long breakdown and the main one */
+    { id: 'early', s: [['intro', [16]], ['groove', [16, 32]], ['build', [8, 16]], ['drop', [16]], ['breakdown', [32]], ['build', [32]], ['drop', [32, 48]], ['outro', [16, 32]]] },
+    /* one long breakdown in the middle */
+    { id: 'onebreak', s: [['intro', [16, 32]], ['groove', [48]], ['build', [16]], ['drop', [32]], ['breakdown', [32]], ['build', [32]], ['drop', [48]], ['outro', [16]]] },
+    /* a drop, a bridge (the groove again, changed), and the last drop */
+    { id: 'bridge', s: [['intro', [16]], ['groove', [32]], ['breakdown', [16]], ['build', [32]], ['drop', [32]], ['groove', [16], 'bridge'], ['build', [16]], ['drop', [32, 48]], ['outro', [16, 32]]] },
+    /* led by the groove: a short break, the groove again, and a drop that comes back without a build */
+    { id: 'grooveled', s: [['intro', [16, 32]], ['groove', [32]], ['breakdown', [8], 'break'], ['groove', [32]], ['build', [16, 32]], ['drop', [32]], ['breakdown', [16]], ['drop', [32]], ['outro', [16]]] }
+  ];
+  const PROG_FLOOR = { intro: 16, groove: 16, breakdown: 8, build: 8, drop: 16, outro: 16 };
+  /* the form, fitted to six to eight and a half minutes at the record's tempo: the longest sections give or take eight bars */
+  function writeProgForm(q, bpm) {
+    const pick = (a) => a[Math.floor(q() * a.length)], F = pick(PROG_FORMS);
+    const lo = Math.max(192, Math.ceil(6 * bpm / 4 / 8) * 8), hi = Math.min(256, Math.floor(8.5 * bpm / 4 / 8) * 8);
+    const a = F.s.map(([n, opts, v]) => [n, pick(opts), v || null]);
+    const total = () => a.reduce((s, x) => s + x[1], 0);
+    for (let i = 0; total() > hi && i < 60; i++) {
+      /* (the builds keep their length: the longest other section that can, gives eight bars) */
+      let best = -1; a.forEach((x, j) => { if (x[0] !== 'build' && x[1] - 8 >= (PROG_FLOOR[x[0]] || 8) && (best < 0 || x[1] > a[best][1])) best = j; });
+      if (best < 0) break; a[best][1] -= 8;
+    }
+    for (let i = 0; total() < lo && i < 60; i++) { const c = a.map((x, j) => j).filter((j) => (a[j][0] === 'drop' || a[j][0] === 'groove') && a[j][1] < 48); if (!c.length) break; a[c[i % c.length]][1] += 8; }
+    return { id: F.id, arr: a.map((x) => [x[0], x[1]]), vars: a.map((x) => x[2]) };
+  }
+  /* the patterns a record draws from */
+  /* bass lines: per bar, [sixteenth, length (sixteenths), interval, level] */
+  const PB = {
+    roll: [[1, 0.9, 0, 0.85], [2, 0.9, 0, 1], [3, 0.9, 12, 0.7], [5, 0.9, 0, 0.85], [6, 0.9, 0, 1], [7, 0.9, 12, 0.7], [9, 0.9, 0, 0.85], [10, 0.9, 0, 1], [11, 0.9, 12, 0.7], [13, 0.9, 0, 0.85], [14, 0.9, 0, 1], [15, 0.9, 12, 0.7]],
+    gallop: [[1, 0.9, 0, 0.8], [2, 0.9, 12, 0.6], [3, 0.9, 0, 1], [5, 0.9, 0, 0.8], [6, 0.9, 12, 0.6], [7, 0.9, 0, 1], [9, 0.9, 0, 0.8], [10, 0.9, 12, 0.6], [11, 0.9, 0, 1], [13, 0.9, 0, 0.8], [14, 0.9, 12, 0.6], [15, 0.9, 0, 1]],
+    offroll: [[2, 0.9, 0, 1], [3, 0.9, 12, 0.75], [6, 0.9, 0, 1], [7, 0.9, 12, 0.75], [10, 0.9, 0, 1], [11, 0.9, 12, 0.75], [14, 0.9, 0, 1], [15, 0.9, 12, 0.75]],
+    offbeat: [[2, 1.8, 0, 1], [6, 1.8, 0, 1], [10, 1.8, 0, 1], [14, 1.8, 0, 1]],
+    pulse8: [[0, 1.6, 0, 0.8], [2, 1.6, 0, 1], [4, 1.6, 0, 0.8], [6, 1.6, 12, 0.8], [8, 1.6, 0, 0.8], [10, 1.6, 0, 1], [12, 1.6, 0, 0.8], [14, 1.6, 7, 0.8]],
+    synco: [[0, 2.5, 0, 1], [3, 2.5, 0, 0.9], [6, 1.5, 12, 0.8], [8, 2.5, 0, 1], [11, 2.5, 7, 0.9], [14, 1.5, 0, 0.8]],
+    long: [[0, 7, 0, 1], [8, 5, 0, 0.9], [14, 1.5, 12, 0.7]],
+    walk: [[2, 1.8, 0, 1], [6, 1.8, 3, 0.9], [10, 1.8, 5, 0.9], [14, 1.8, 7, 0.9]]
+  };
+  const PB_DRIVE = ['roll', 'gallop', 'offroll', 'offbeat', 'pulse8', 'synco', 'walk'];
+  /* hats per bar: [beat offset, level, open?] */
+  const PH = {
+    off: [[0.5, 0.9], [1.5, 0.85], [2.5, 0.9], [3.5, 0.85]],
+    sixteen: [0, 1, 2, 3].flatMap((b) => [[b, 0.45], [b + 0.25, 0.6], [b + 0.5, 0.9], [b + 0.75, 0.6]]),
+    offopen: [[0.5, 0.9], [1.5, 0.85], [2.5, 0.9], [3.5, 0.8, 1]],
+    shuffle: [0, 1, 2, 3].flatMap((b) => [[b + 0.5, 0.9], [b + 0.75, 0.45]]),
+    sparse: [[0.5, 0.8], [2.5, 0.8], [3.75, 0.5]]
+  };
+  const PHATS = Object.keys(PH);
+  /* the backbeat: claps on two and four, on four alone with a ghost, or with a pickup */
+  const PC = { two4: [[1, 1], [3, 1]], four: [[3, 1], [1.75, 0.3, 'ghost']], pick: [[1, 1], [3, 1], [2.75, 0.35, 'ghost']] };
+  const PCLAPS = Object.keys(PC);
+  /* the arpeggio's versions: from the record's figure, two bars - itself, turned round, busier, sparse, in eighths */
+  function writeProgArps(base, q) {
+    const A = base.concat(base.map((ix, s) => (s >= 12 && ix >= 0 ? (ix + 1 + Math.floor(q() * 2)) % 5 : ix)));
+    const B = A.map((ix, s) => (ix < 0 ? ix : s >= 16 ? 4 - ix : ix));
+    const C = A.map((ix, s) => (ix < 0 ? (s % 4 ? (s + 1) % 5 : 0) : ix));
+    const S = A.map((ix, s) => (s % 4 === 0 ? Math.max(0, ix) : -1));
+    const E = A.map((ix, s) => (s % 2 === 0 ? Math.max(0, ix) : -1));
+    return { A, B, C, S, E };
+  }
+
+  /* every section's script: on[part] = [[from bar, to bar, pattern], ...]
+     (bars within the section), the hook's entries, its fills, and for builds
+     and drops what they do at their ends */
+  function writeProgScripts(q, tr, vars) {
+    const pick = (a) => a[Math.floor(q() * a.length)], chance = (p) => q() < p;
+    const shuffle = (a) => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(q() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+    const P = tr.patch, lines = shuffle(PB_DRIVE), lineA = lines[0], lineB = lines[1];
+    const hatsA = pick(PHATS.filter((h) => h !== 'sparse')), hatsB = pick(PHATS.filter((h) => h !== hatsA && h !== 'sparse')), clapA = pick(PCLAPS), clapB = pick(PCLAPS);
+    const out = [];
+    let x = 0; const seen = {};
+    tr.arr.forEach(([name, L], i) => {
+      const n = seen[name] || 0; seen[name] = n + 1;
+      const v = vars[i], nx = tr.arr[i + 1] && tr.arr[i + 1][0], pv = i ? tr.arr[i - 1][0] : null;
+      const sc = { name, start: x, len: L, n, v, on: {}, hooks: [], fills: [] };
+      const put = (part, f, t, pt) => { (sc.on[part] = sc.on[part] || []).push([Math.max(0, f), Math.min(L, t), pt || true]); };
+      const steps = Math.max(1, L / 8);
+      /* fills at phrase ends (every eight bars), each its own kind */
+      const fillAt = () => { for (let k = 7; k < L - 1; k += 8) sc.fills.push([k, pick(k % 16 === 15 ? ['snare4', 'toms', 'flam', 'kickdrop'] : ['snare4', 'toms', 'none', 'none', 'kickdrop'])]); };
+      if (name === 'intro') {
+        sc.v = v || pick(['pad', 'drums', 'pulse', 'perc']);
+        const h = L / 2, q3 = L * 3 / 4;
+        if (sc.v === 'pad') { put('pad', 0, L, 'hold'); put('atmos', 0, L); put('arp', Math.min(4, L / 4), L, 'E'); put('kick', h, L); put('hats', q3, L, 'sparse'); }
+        if (sc.v === 'drums') { put('kick', 0, L); put('hats', 0, L, 'sparse'); if (P.shaker) put('shaker', 4, L, 'eighth'); put('perc', 8, L, 'A'); put('pad', h, L, 'hold'); put('arp', q3, L, 'S'); }
+        if (sc.v === 'pulse') { put('bass', 0, L, 'pulse8'); put('arp', 0, L, 'E'); put('pad', 4, L, 'hold'); put('atmos', 0, L); put('kick', h, L); put('hats', q3, L, 'off'); }
+        if (sc.v === 'perc') { put('perc', 0, L, 'B'); if (P.shaker) put('shaker', 0, L, 'sixteen'); put('kick', 4, L); put('pad', 8, L, 'hold'); put('hats', h, L, 'sparse'); put('arp', q3, L, 'E'); }
+      } else if (name === 'groove') {
+        sc.v = v || 'groove';
+        const bridge = sc.v === 'bridge';
+        put('kick', 0, L); put('pad', 0, L, 'hold');
+        /* the parts come in in their own order, eight bars at a time, two at the start; one may leave again */
+        const parts = shuffle(['bass', 'clap', 'hats', 'shaker', 'arp', 'perc', 'ride', 'counter']).filter((p) => (p !== 'shaker' || P.shaker) && (p !== 'ride' || P.ride) && !(bridge && p === 'arp'));
+        const first = parts.splice(0, 2), when = {};
+        first.forEach((p) => { when[p] = 0; });
+        parts.forEach((p, j) => { when[p] = Math.min(steps - 1, 1 + Math.floor(j * (steps - 1) / Math.max(1, parts.length - 1))) * 8; if (steps === 1) when[p] = 4 * (j % 2); });
+        const leaver = steps >= 3 && chance(0.6) ? pick(Object.keys(when).filter((p) => p !== 'bass' && when[p] < L - 16)) : null;
+        Object.entries(when).forEach(([p, w]) => {
+          const end = p === leaver ? Math.min(L, w + 16) : L;
+          if (p === 'bass') put('bass', w, end, bridge ? lineB : lineA);
+          else if (p === 'hats') { put('hats', w, Math.min(end, w + L / 2), hatsA); if (w + L / 2 < end) put('hats', w + L / 2, end, hatsB); }
+          else if (p === 'clap') put('clap', w, end, clapA);
+          else if (p === 'shaker') put('shaker', w, end, pick(['sixteen', 'eighth']));
+          else if (p === 'arp') put('arp', w, end, pick(['A', 'B']));
+          else if (p === 'perc') put('perc', w, end, bridge ? 'C' : pick(['A', 'B']));
+          else if (p === 'ride') put('ride', w, end, pick(['quarter', 'eighth']));
+          else if (p === 'counter') put('counter', w, end);
+        });
+        if (!sc.on.clap) put('clap', L / 2, L, clapA);
+        /* the hook teased quietly near the end, now and then */
+        if (!bridge && n === 0 && L >= 16 && chance(0.7)) sc.hooks.push({ at: L - 8, which: 'hook', voice: 'keys', g: 0.35 });
+        if (bridge) sc.hooks.push({ at: 0, which: 'alt', voice: 'keys', g: 0.45, tr: 12 });
+        fillAt();
+      } else if (name === 'breakdown') {
+        sc.v = v || pick(['keys', 'strings', 'perc', 'halftime', 'piano']);
+        const h = L / 2;
+        if (sc.v === 'break') { put('hats', 0, L, 'off'); put('clap', 0, L, clapB); put('perc', 0, L, 'C'); put('bass', 0, L, 'long'); put('arp', 4, L, 'S'); }
+        if (sc.v === 'keys') { put('pad', 0, L, 'hold'); put('atmos', 0, L); put('arp', h, L, 'S'); sc.hooks.push({ at: 0, which: 'hook', voice: 'keys', g: 1 }); for (let k = 8; k < L; k += 8) sc.hooks.push({ at: k, which: 'hook', voice: 'lead', g: 0.7 }, { at: k, which: 'hook', voice: 'keys', g: 0.3, tr: 12 }); }
+        if (sc.v === 'strings') { put('pad', 0, L, 'hold'); put('atmos', 0, L); put('counter', 8, L); for (let k = 0; k < L; k += 8) sc.hooks.push({ at: k, which: k ? 'hook' : 'open', voice: 'lead', g: k ? 0.75 : 0.5 }); }
+        if (sc.v === 'perc') { put('pad', 0, L, 'hold'); put('perc', 0, L, 'A'); if (P.shaker) put('shaker', 0, L, 'eighth'); put('bass', 0, L, 'long'); put('atmos', 0, L); sc.hooks.push({ at: Math.max(0, L - 8), which: 'hook', voice: 'keys', g: 0.6 }); }
+        if (sc.v === 'halftime') { put('half', 0, L); put('hats', 0, L, 'sparse'); put('pad', 0, L, 'hold'); put('arp', 0, L, 'S'); put('bass', 0, L, 'long'); for (let k = 0; k < L; k += 8) sc.hooks.push({ at: k, which: k ? 'hook' : 'alt', voice: 'lead', g: 0.7 }); }
+        if (sc.v === 'piano') { put('chords', 0, L); put('pad', h, L, 'hold'); put('atmos', 0, L); sc.hooks.push({ at: 0, which: 'hook', voice: 'keys', g: 0.9 }); for (let k = 8; k < L; k += 8) sc.hooks.push({ at: k, which: 'open', voice: 'keys', g: 0.8 }, { at: k, which: 'hook', voice: 'lead', g: 0.55 }); }
+        sc.entry = pv === 'drop' ? pick(['sweep', 'sweep', 'impact', 'none']) : 'none';
+      } else if (name === 'build') {
+        const M = tr.moves[n] || tr.moves[0] || { concept: 'melodic' }, c = M.concept, toDrop = nx === 'drop';
+        sc.v = c;
+        const end = toDrop ? L : L, r8 = Math.max(0, L - 8), q1 = L / 4, h = L / 2, q3 = L * 3 / 4;
+        sc.build = { roll: 'snare', rollBars: Math.min(8, L), riser: true, riserBars: Math.min(16, L), gate: [r8, L], breath: toDrop, muffle: true };
+        if (c === 'melodic') { put('kick', 0, end); put('clap', 0, r8, clapA); put('hats', 0, end, hatsA); put('bass', 0, L - 4, 'offbeat'); put('arp', 0, h, 'A'); put('arp', h, L, 'C'); put('pad', 0, L, 'hold');
+          for (let k = 0; k < r8; k += 16) sc.hooks.push({ at: k, which: 'hook', voice: 'lead', g: 0.9 }); for (let k = 8; k < r8; k += 16) sc.hooks.push({ at: k, which: 'open', voice: 'keys', g: 0.6 }); }
+        if (c === 'strip') { put('kick', 0, q3); put('clap', 0, h, clapA); put('hats', 0, h, hatsA); put('perc', 0, q1, 'A'); put('counter', 0, q1); put('bass', 0, q3, lineA); put('arp', 0, L, 'A'); put('pad', 0, L, 'hold');
+          sc.hooks.push({ at: r8, which: 'open', voice: 'lead', g: 0.7, only: 6 }); Object.assign(sc.build, { roll: 'none', gate: null, riserBars: Math.min(8, L) }); }
+        if (c === 'perc') { put('kick', 0, end); put('perc', 0, L, 'C'); put('hats', 0, L, 'sixteen'); if (P.shaker) put('shaker', 0, L, 'sixteen'); put('bass', 0, h, lineA); put('arp', h, L, 'C'); put('pad', 0, L, 'hold');
+          for (let k = 1; k < L - 1; k += 2) sc.fills.push([k, k >= r8 ? 'toms' : 'none']); Object.assign(sc.build, { roll: 'toms', riser: false, gate: null, sweepUp: true }); }
+        if (c === 'chord') { put('kick', q1, end); put('hats', 0, L, 'off'); put('bass', 0, L, 'long'); put('pad', 0, L, 'hold'); put('arp', 0, h, 'S'); put('arp', h, L, 'A');
+          for (let k = 0; k < r8; k += 16) sc.hooks.push({ at: k, which: 'hook', voice: 'keys', g: 0.7 }); Object.assign(sc.build, { gate: [h, L], riserBars: Math.min(8, L) }); }
+        if (c === 'bass') { put('kick', 0, q3); put('clap', 0, q3, clapB); put('hats', 0, L, hatsB); put('bass', 0, q1, lineA); put('bass', q1, h, 'pulse8'); put('bass', h, q3, 'offbeat'); put('bass', q3, L - 1, 'long'); put('arp', 0, L, 'E'); put('pad', 0, L, 'hold');
+          Object.assign(sc.build, { rollBars: Math.min(4, L), gate: null }); }
+        if (!toDrop) sc.build.breath = false;
+      } else if (name === 'drop') {
+        sc.v = n ? 'developed' : pick(['full', 'stagger']);
+        const D = tr.drops[n] || {}, blocks = L / 8;
+        sc.hit = D.hit || 'crashImpact';
+        put('kick', 0, L); put('pad', 0, L, 'hold');
+        put('bass', 0, L, n ? lineB : lineA);
+        put('clap', 0, L, n ? clapB : clapA);
+        const late = sc.v === 'stagger' ? 8 : 0;
+        put('hats', late ? 0 : 0, L / 2, n ? hatsB : hatsA); put('hats', L / 2, L, n ? hatsA : hatsB);
+        if (P.shaker) put('shaker', late, L, 'sixteen');
+        if (P.ride) put('ride', 8, L, pick(['quarter', 'eighth']));
+        put('perc', late, L, pick(['A', 'B']));
+        /* the drop in eight-bar blocks: it starts on the whole hook (the payoff); then the record's own order of
+           the hook again, its other endings, the keys saying it alone, the counter-melody joining, a block without the lead */
+        const opts = n ? ['alt', 'hook', 'keysonly', 'counter', 'open', 'arp'] : ['hook', 'open', 'keysonly', 'counter', 'arp', 'hook'];
+        let counterOn = n > 0 ? 0 : null;
+        for (let bl = 0; bl < blocks; bl++) {
+          const w = bl === 0 ? (n ? pick(['alt', 'hook']) : 'hook') : pick(opts), at = bl * 8;
+          put('arp', at, at + 8, w === 'arp' ? 'C' : n ? pick(['B', 'C']) : pick(['A', 'B']));
+          if (w === 'keysonly') sc.hooks.push({ at, which: 'hook', voice: 'keys', g: 0.65, tr: 12 });
+          else if (w === 'arp') { if (counterOn == null) counterOn = at; }
+          else { sc.hooks.push({ at, which: w === 'counter' ? 'hook' : w, voice: 'lead', g: 1 }, { at, which: w === 'counter' ? 'hook' : w, voice: 'keys', g: 0.3, tr: 12 }); if (w === 'counter' && counterOn == null) counterOn = at; }
+        }
+        if (counterOn != null) put('counter', counterOn, L);
+        sc.crashEvery = pick([8, 16]);
+        fillAt();
+      } else if (name === 'outro') {
+        sc.v = pick(['drums', 'pad', 'mirror']);
+        const h = L / 2, q3 = L * 3 / 4;
+        if (sc.v === 'drums') { put('kick', 0, L - 1); put('clap', 0, q3, clapA); put('hats', 0, L, hatsA); put('bass', 0, h, lineA); put('pad', 0, h, 'hold'); put('arp', 0, h / 2, 'S'); }
+        if (sc.v === 'pad') { put('kick', 0, h); put('clap', 0, h / 2, clapA); put('hats', 0, h, 'sparse'); put('bass', 0, h / 2, lineA); put('pad', 0, L, 'hold'); put('arp', 0, L, 'E'); put('atmos', 0, L); }
+        if (sc.v === 'mirror') { put('kick', 0, q3); put('hats', 0, h, hatsB); put('clap', 0, h, clapB); put('perc', 0, q3, 'A'); put('bass', 0, h, lineB); put('pad', 0, L, 'hold'); put('arp', 0, q3, 'E'); }
+      }
+      out.push(sc);
+      x += L;
+    });
+    return out;
+  }
+
+  /* the harmony: two, four or eight chords, each one, two or four bars (a
+     cycle of four or eight bars), and for the breakdowns the same chords
+     re-harmonised (each by the chord a third below, sharing two of its notes) */
+  function writeProgChords(q, tr) {
+    const pick = (a) => a[Math.floor(q() * a.length)], minor = tr.scale !== 'major' && tr.scale !== 'mixo';
+    const [len, bars] = pick([[4, 2], [4, 2], [2, 4], [4, 1], [8, 1]]);
+    const two = minor ? [[0, 5], [0, 3], [0, 6], [5, 6], [0, 4]] : [[0, 4], [0, 3], [0, 5], [3, 4]];
+    let degs = len === 2 ? pick(two) : tr.prog.slice(0, 4);
+    if (len === 8) { const other = pick(PROGS[minor ? 'minor' : 'major']); degs = degs.concat([degs[0], degs[1], other[2], other[3]]); }
+    return { degs, bars, re: degs.map((d) => d - 2) };
+  }
+  function progHarmony(tr, degsIn) {
     const sc = SCALES[tr.scale] || SCALES.minor, T = 57 + tr.key;
     const pitch = (d) => sc[((d % 7) + 7) % 7] + 12 * Math.floor(d / 7);
     let prev = null;
-    return tr.prog.map((d) => {
+    return (degsIn || tr.prog).map((d) => {
       const third = (pitch(d + 2) - pitch(d) + 12) % 12, sev = (pitch(d + 6) - pitch(d) + 12) % 12;
       const colour = third === 4 && sev === 11 ? d + 6 : d + 8;            // maj7 where it is major-seventh, else the ninth
       let notes = [d, d + 2, d + 4, colour].map((x) => T + pitch(x)).map((n) => { while (n > 71) n -= 12; while (n < 52) n += 12; return n; }).sort((x, y) => x - y);
@@ -1485,41 +1671,77 @@ window.VinylPlayer.Generative = (() => {
       prev = notes;
       let root = T + pitch(d); while (root > 40) root -= 12; while (root < 28) root += 12;
       const arp = [d, d + 2, d + 4].map((x) => { let n = T + 12 + pitch(x); while (n > 77) n -= 12; while (n < 64) n += 12; return n; }).sort((x, y) => x - y);
-      return { notes, root, arp: [arp[0], arp[1], arp[2], arp[0] + 12, arp[1] + 12], deg: d };
+      /* the counter-melody's tones: the chord's third and seventh, in the middle register */
+      const guide = [d + 2, d + 6].map((x) => { let n = T + pitch(x); while (n > 67) n -= 12; while (n < 55) n += 12; return n; });
+      return { notes, root, arp: [arp[0], arp[1], arp[2], arp[0] + 12, arp[1] + 12], deg: d, guide };
     });
   }
+  /* the counter-melody: the guide tones voice-led - the nearest of each chord's third and seventh to the note before - held through the chord, or moving within it */
+  function writeProgCounter(q, H, chordBars) {
+    let prev = H[0].guide[0];
+    const moving = q() < 0.5, out = [];
+    H.forEach((c, i) => {
+      const a = c.guide.slice().sort((x, y) => Math.abs(x - prev) - Math.abs(y - prev)), beats = chordBars * 4, at = i * beats;
+      if (moving && beats >= 8) { out.push([at, beats / 2, a[0]], [at + beats / 2, beats / 2, a[1]]); prev = a[1]; }
+      else { out.push([at, beats, a[0]]); prev = a[0]; }
+    });
+    return out;
+  }
   const PCELLS = [[1.5, 0.5, 1, 1], [2, 1, 1], [1, 1, 2], [1.5, 0.5, 2], [1, 0.5, 0.5, 1, 1], [2, 2], [1, 1, 1, 1], [3, 1], [0.5, 0.5, 1, 2], [1.5, 1.5, 1]];
+  /* the hook: eight bars in one of several plans (AABA, ABAC, a call and a
+     response, a four-bar line said twice), on one of several shapes (an
+     arch, a sigh falling, a wave, a climb, a high pedal), sometimes with a
+     pickup into it; its strong beats on the chords' own notes (on the
+     record's chord rhythm), home at the end. And its other endings: open
+     (to the fifth) and alt (a new last two bars) */
   function writeProgHook(q, tr) {
     const pick = (a) => a[Math.floor(q() * a.length)], wob = () => Math.round((q() - 0.5) * 2);
-    const c1 = pick(PCELLS), c2 = pick(PCELLS), c3 = pick(PCELLS), c4 = pick(PCELLS);
-    const bars = [c1, c2, c1, c3, c1, c4, q() < 0.6 ? c1 : pick(PCELLS), [4]];
-    const s = pick([4, 2, 4, 3]), peak = s + pick([4, 5, 5, 6]);
-    /* where the line is heading, beat by beat: up to a first peak, down in the answer, up to the highest, home */
-    const A = [[0, s], [3, s + 3 + wob()], [6, s + 1], [8, s], [11, s + 1 + wob()], [14, s - 2 - (q() < 0.5 ? 1 : 0)], [16, s], [19, s + 3], [20.5, peak], [22, s + 3 + wob()], [24, s + 1], [27, s + 3], [28, 7]];
+    const degs = (tr.chords && tr.chords.degs) || tr.prog, cb = (tr.chords && tr.chords.bars) || 2;
+    const c = Array.from({ length: 6 }, () => pick(PCELLS)), sparse = () => pick([[2, 2], [3, 1], [-2, 2], [1, -1, 2]]);
+    const plan = pick(['AABA', 'ABAC', 'callresp', 'long4', 'AABA']);
+    const bars = plan === 'AABA' ? [c[0], c[1], c[0], c[2], c[0], c[3], q() < 0.6 ? c[0] : c[4], [4]]
+      : plan === 'ABAC' ? [c[0], c[1], c[2], c[3], c[0], c[1], c[4], [4]]
+      : plan === 'callresp' ? [c[0], c[1], sparse(), [-4], c[0], c[2], sparse(), [4]]
+      : [c[0], c[1], c[2], [4], c[0], c[1], c[3], [4]];
+    const s = pick([4, 2, 4, 3]), peak = s + pick([4, 5, 5, 6]), shapeName = pick(['arch', 'sigh', 'wave', 'climb', 'pedal']);
+    const A = {
+      arch: [[0, s], [3, s + 3 + wob()], [6, s + 1], [8, s], [11, s + 1 + wob()], [14, s - 2], [16, s], [19, s + 3], [20.5, peak], [22, s + 3 + wob()], [24, s + 1], [27, s + 3], [28, 7]],
+      sigh: [[0, s + 4], [4, s + 2], [8, s], [12, s - 1], [16, s + 3], [20, s + 1], [24, s - 1], [28, 7]],
+      wave: [[0, s], [4, s + 2], [8, s - 1], [12, s + 3], [16, s], [20, s + 4], [24, s + 1], [28, 7]],
+      climb: [[0, s - 2], [8, s], [16, s + 2], [24, peak], [26, peak - 1], [28, 7]],
+      pedal: [[0, s + 3], [8, s + 3], [16, s + 3], [24, s + 4], [28, 7]]
+    }[shapeName];
     const target = (b) => { for (let i = 1; i < A.length; i++) if (b <= A[i][0]) { const [x0, y0] = A[i - 1], [x1, y1] = A[i]; return y0 + (y1 - y0) * (b - x0) / (x1 - x0); } return 7; };
+    const chordTones = (beat) => { const cd = degs[Math.floor(beat / (4 * cb)) % degs.length]; return [0, 2, 4].map((k) => (((cd + k) % 7) + 7) % 7); };
     const out = [];
     bars.forEach((cell, bi) => {
       let beat = bi * 4;
       cell.forEach((len) => {
+        if (len < 0) { beat -= len; return; }                     // a rest
         let d = Math.round(target(beat));
-        /* on the strong beats, a tone of the chord under it (the chords change every two bars) */
+        if (shapeName === 'pedal' && beat % 2 !== 0) d += pick([-1, -2, 1]);    // the pedal's neighbours between its beats
         if (beat % 2 === 0) {
-          const cd = tr.prog[Math.floor(beat / 8) % tr.prog.length], tones = [0, 2, 4].map((k) => (((cd + k) % 7) + 7) % 7);
+          const tones = chordTones(beat);
           let best = d, bd = 9; for (let x = d - 2; x <= d + 2; x++) if (tones.indexOf(((x % 7) + 7) % 7) >= 0 && Math.abs(x - d) < bd) { bd = Math.abs(x - d); best = x; }
           d = best;
         }
         const n = out.length;
-        if (n >= 2 && out[n - 1][2] === d && out[n - 2][2] === d) d += target(beat + 1) > d ? 1 : -1;       // not three the same
+        if (shapeName !== 'pedal' && n >= 2 && out[n - 1][2] === d && out[n - 2][2] === d) d += target(beat + 1) > d ? 1 : -1;       // not three the same
         out.push([beat, len, d]);
         beat += len;
       });
     });
     out[out.length - 1][2] = 7;                        // home, held
-    /* the answer that does not close: the last two bars to the fifth, left open */
+    /* a pickup into the first bar, now and then */
+    if (q() < 0.45) { const p = out[0][2]; out.unshift([-0.5, 0.5, p - 1]); if (q() < 0.5) out.unshift([-1, 0.5, p - 2]); }
+    const lastTwo = (o) => o.findIndex((x) => x[0] >= 24);
     const open = out.map((x) => x.slice());
-    const k = open.findIndex((x) => x[0] >= 24);
-    for (let i = k; i < open.length; i++) open[i][2] = i === open.length - 1 ? 4 : Math.round((open[i][2] + 4) / 2);
-    return { hook: out, open };
+    for (let i = lastTwo(open); i < open.length; i++) open[i][2] = i === open.length - 1 ? 4 : Math.round((open[i][2] + 4) / 2);
+    /* alt: a new seventh bar, and the end on the third, held */
+    const alt = out.filter((x) => x[0] < 24).map((x) => x.slice()), cell = pick(PCELLS);
+    let beat = 24; cell.forEach((len) => { alt.push([beat, len, Math.round(target(beat)) + pick([1, 2])]); beat += len; });
+    alt.push([28, 4, 2]);
+    return { hook: out, open, alt, plan, shape: shapeName };
   }
 
   /* ---- the record, pressed: one segment of it -------------------------------- */
@@ -1544,16 +1766,17 @@ window.VinylPlayer.Generative = (() => {
     return progBankFor(tr).then((S) => pressProg(tr, a, b, S));
   }
   function pressProg(tr, a, b, S) {
-    const P = tr.patch, H = tr.harm || (tr.harm = progHarmony(tr));
+    const P = tr.patch, PL = tr.plan;
     const BEATs = 60 / tr.bpm, BARs = BEATs * 4;
     const from = Math.max(0, Math.floor((a - 2) / 2) * 2), end = Math.min(b + 1, tr.bars), last = b >= tr.bars;
     const t0 = from * BARs, skip = at(tr, a) - at(tr, from), want = at(tr, b) - at(tr, a) + (last ? 0 : FADE);
     const LOOK = Math.round(0.1 * PSR), total = skip + want + LOOK;
     const ctx = new OfflineAudioContext(2, total, PSR), T1 = total / PSR;
     /* the sections, and where in them a bar is */
-    const secs = []; { let x = 0, seen = {}; tr.arr.forEach(([name, len]) => { secs.push({ name, start: x, len, n: seen[name] || 0 }); seen[name] = (seen[name] || 0) + 1; x += len; }); }
+    const secs = tr.scripts;
     const secOf = (bar) => secs.find((s) => bar >= s.start && bar < s.start + s.len) || secs[secs.length - 1];
-    const chordAtBar = (bar) => H[Math.floor(bar / 2) % H.length];
+    /* the chords on the record's harmonic rhythm; a breakdown re-harmonised where the plan says */
+    const chordAtBar = (bar) => { const s = secOf(bar), set = s && s.name === 'breakdown' && PL.reharm ? PL.HB : PL.H; return set[Math.floor(bar / PL.chordBars) % set.length]; };
     const when = (beatAbs) => beatAbs * BEATs - t0;
     /* ---- the graph ---- */
     const G = (v) => { const g = ctx.createGain(); g.gain.value = v == null ? 1 : v; return g; };
@@ -1603,7 +1826,7 @@ window.VinylPlayer.Generative = (() => {
       kick: part(rest, lv('kick'), null, kickF), clap: part(rest, lv('clap'), { room: 0.3 }), hats: part(rest, lv('hats'), { room: 0.08 }),
       shaker: part(rest, lv('shaker')), ride: part(rest, lv('ride')), perc: part(rest, lv('perc'), { hall: 0.2, delay: 0.35 }), snare: part(rest, lv('snare'), { room: 0.3 }, snareF),
       bass: part(rest, lv('bass'), null, bassF), pad: part(music, lv('pad'), { hall: 0.35 }, padF), arp: part(music, lv('arp'), { hall: 0.25, delay: 0.3 }, arpF),
-      lead: part(music, lv('lead'), { hall: 0.3, delay: 0.22 }, leadF), keys: part(music, lv('keys'), { hall: 0.5, delay: 0.3 }, keysF), atmos: part(rest, lv('atmos'), { hall: 0.4 }),
+      lead: part(music, lv('lead'), { hall: 0.3, delay: 0.22 }, leadF), counter: part(music, lv('counter'), { hall: 0.35 }), keys: part(music, lv('keys'), { hall: 0.5, delay: 0.3 }, keysF), atmos: part(rest, lv('atmos'), { hall: 0.4 }),
       crash: part(rest, lv('crash'), { hall: 0.3 }), impact: part(tail, lv('impact'), { hall: 0.3 }), revcym: part(tail, lv('revcym')), sweeps: part(rest, lv('sweeps')), riser: part(tail, lv('riser'))
     };
     /* the gate (the build's chopped chords) sits between the pad's duck and its output */
@@ -1639,117 +1862,133 @@ window.VinylPlayer.Generative = (() => {
       return st;
     };
     const duckCurve = (depth, Lb) => { const n = 96, c = new Float32Array(n); for (let k = 0; k < n; k++) { const u = k / (n - 1), a = Math.min(1, u * Lb * BEATs / 0.003); c[k] = 1 - depth * a * 0.5 * (1 + Math.cos(Math.PI * u)); } c[n - 1] = 1; return c; };
-    const DUCKS = [[p.bass.duck, duckCurve(0.6, 0.5), 0.5], [p.pad.duck, duckCurve(0.55, 0.75), 0.75], [p.arp.duck, duckCurve(0.4, 0.75), 0.75], [p.lead.duck, duckCurve(0.35, 0.75), 0.75], [hallDuck, duckCurve(0.45, 0.75), 0.75]];
+    const DUCKS = [[p.bass.duck, duckCurve(0.6, 0.5), 0.5], [p.pad.duck, duckCurve(0.55, 0.75), 0.75], [p.arp.duck, duckCurve(0.4, 0.75), 0.75], [p.lead.duck, duckCurve(0.35, 0.75), 0.75], [p.counter.duck, duckCurve(0.35, 0.75), 0.75], [hallDuck, duckCurve(0.45, 0.75), 0.75]];
     const rnd = (bar, salt) => seeded((tr.seed ^ Math.imul(bar + 1, 0x9E3779B1) ^ salt) >>> 0);
     const hook = tr.progHook;
     const tonic = 69 + tr.key, sc = SCALES[tr.scale] || SCALES.minor, mel = (d) => tonic + sc[((d % 7) + 7) % 7] + 12 * Math.floor(d / 7);
     const playHook = (startBar, which, dest, g, transpose, only) => {
-      (which === 'open' ? hook.open : hook.hook).forEach(([bt, len, d], i) => {
+      (hook[which] || hook.hook).forEach(([bt, len, d], i) => {
         if (only != null && i >= only) return;
         const bAbs = startBar * 4 + bt, bar = Math.floor(bAbs / 4); if (bar < from - 20 || bar >= end) return;
         const buf = dest === p.lead ? S.lead(mel(d) + (transpose || 0), len) : S.keys(mel(d) + (transpose || 0), len);
         play(buf, bAbs, g, dest);
       });
     };
+    const onIn = (scr, part, k) => { const r = scr.on[part]; if (!r) return null; for (const [f, t, pt] of r) if (k >= f && k < t) return pt; return null; };
+    const hatBuf = S.hat(+P.hat.toFixed(3));
     for (let bar = Math.max(0, from - 20); bar < end; bar++) {
       const sec = secOf(bar), k = bar - sec.start, L = sec.len, name = sec.name, nx = secs[secs.indexOf(sec) + 1], toDrop = name === 'build' && nx && nx.name === 'drop';
-      const ch = chordAtBar(bar), R = rnd(bar, 0x77), longEvent = bar < from;
-      const mv = name === 'build' ? (tr.moves[sec.n] || tr.moves[0] || {}) : null;
-      const dropD = name === 'drop' ? (tr.drops[sec.n] || {}) : null;
-      /* which parts play this bar */
-      const kickOn = (name === 'intro' && k >= L / 2) || name === 'groove' || name === 'drop' || (name === 'outro' && k < L - 1) || (name === 'build' && !(mv.concept === 'strip' && k >= L - 8));
-      const backbeat = name === 'groove' || name === 'drop' || (name === 'build' && k < L - 1) || (name === 'outro' && k < L * 0.75);
-      const hatsOn = (name === 'intro' && k >= L * 0.75) || name === 'groove' || name === 'drop' || name === 'build' || (name === 'outro' && k < L * 0.75);
-      const fillBar = name === 'groove' && (k % 16 === 15 || k === L - 1);
-      /* (only the long events reach back before the segment: the pad, the riser, the atmosphere) */
+      const ch = chordAtBar(bar), nch = chordAtBar(bar + 1), R = rnd(bar, 0x77), longEvent = bar < from;
+      const on = (part) => onIn(sec, part, k);
+      const B = sec.build || {};
+      const gapBeat = toDrop && B.breath && k === L - 1;             // the breath's beat: nothing struck in it
+      const fill = (sec.fills.find((f) => f[0] === k) || [])[1];
       if (!longEvent) {
+        /* the drums */
+        const kickOn = on('kick');
         for (let bt = 0; bt < 4; bt++) {
-          const beatAbs = bar * 4 + bt;
-          if (kickOn && !(fillBar && bt === 3) && !(toDrop && k === L - 1 && bt === 3)) {
+          const beatAbs = bar * 4 + bt, lastBeat = bt === 3;
+          if (kickOn && !(lastBeat && (gapBeat || fill === 'kickdrop'))) {
             play(S.kick(), beatAbs, 1, p.kick);
             const st = when(beatAbs);
             if (st >= 0 && st < T1 - 0.6) DUCKS.forEach(([d, c, lb]) => d.gain.setValueCurveAtTime(c, st, lb * BEATs));
           }
-          if (backbeat && (bt === 1 || bt === 3) && !(toDrop && k === L - 1 && bt === 3)) play(S.clap(), beatAbs, 1, p.clap);
-          if (hatsOn && !(toDrop && k === L - 1 && bt === 3)) play(S.hat(+P.hat.toFixed(3)), beatAbs + 0.5, 0.85 + 0.15 * R(), p.hats);
-          if (P.ride && ((name === 'groove' && k >= L / 2) || (name === 'drop' && k >= 8))) play(S.ride(), beatAbs, bt % 2 ? 0.7 : 1, p.ride);
         }
-        if (P.shaker && ((name === 'groove' && k >= 4) || name === 'drop')) {
-          const v = [0.45, 0.7, 0.55, 0.9];
-          for (let s = 0; s < 16; s++) play(S.shaker(), bar * 4 + s / 4 + (s % 2 ? 0.04 : 0), v[s % 4], p.shaker);
+        if (on('half')) { play(S.kick(), bar * 4, 1, p.kick); play(S.clap(), bar * 4 + 2, 1, p.clap); }
+        const cl = on('clap');
+        if (cl) (PC[cl] || PC.two4).forEach(([b, g, kind]) => { if (gapBeat && b >= 3) return; if (kind === 'ghost') play(S.snare(220), bar * 4 + b, g, p.snare); else play(S.clap(), bar * 4 + b, g, p.clap); });
+        const ht = on('hats');
+        if (ht) (PH[ht] || PH.off).forEach(([b, g, open]) => { if (gapBeat && b >= 3) return; play(open ? S.openHat() : hatBuf, bar * 4 + b, g * (0.88 + 0.12 * R()), p.hats); });
+        const sh = on('shaker');
+        if (sh) { const v = [0.45, 0.7, 0.55, 0.9]; for (let s = 0; s < 16; s += sh === 'eighth' ? 2 : 1) play(S.shaker(), bar * 4 + s / 4 + (s % 2 ? 0.04 : 0), v[s % 4], p.shaker); }
+        const rd = on('ride');
+        if (rd) for (let s = 0; s < 4; s += rd === 'eighth' ? 0.5 : 1) play(S.ride(), bar * 4 + s, s % 1 ? 0.45 : s % 2 ? 0.7 : 1, p.ride);
+        const pc = on('perc');
+        if (pc) {
+          const base = P.perc, alt = pc === 'B' ? base.map(([st, d]) => [(st + 8) % 16, d]) : pc === 'C' ? base.concat(base.map(([st, d]) => [(st + 6) % 16, (d + 2) % 7])) : base;
+          const two = pc === 'B' && k % 2 === 1 ? base : alt;
+          two.forEach(([st, d]) => play(S.perc(Math.round(mtof(tonic + sc[d % 7]))), bar * 4 + st / 4, 1, p.perc));
         }
-        if ((name === 'groove' && k >= L / 2) || name === 'drop') P.perc.forEach(([st, d]) => play(S.perc(Math.round(mtof(tonic + sc[d % 7]))), bar * 4 + st / 4, 1, p.perc));
-        if (fillBar) [0.5, 0.6, 0.75, 0.9].forEach((v, i) => play(S.snare(200), bar * 4 + 3 + i / 4, v, p.snare));
-        /* the build's roll: the last eight bars, quarters, eighths, sixteenths, thirty-seconds */
-        if (toDrop && k >= L - 8) {
-          const r0 = L - 8, seg = Math.floor((k - r0) / 2), per = [1, 2, 4, 8][seg], n = (k === L - 1 ? 3.75 : 4) * per;
-          for (let i = 0; i < n; i++) { const tb = bar * 4 + i / per, u = ((bar - sec.start - r0) * 4 + i / per) / 31; play(S.snare(Math.round(180 + 170 * u)), tb, 0.3 + 0.7 * Math.pow(u, 1.5), p.snare); }
+        /* the fills, each its own kind */
+        if (fill === 'snare4') [0.5, 0.6, 0.75, 0.9].forEach((v, i) => play(S.snare(200), bar * 4 + 3 + i / 4, v, p.snare));
+        if (fill === 'flam') for (let i = 0; i < 4; i++) play(S.snare(190 + 10 * i), bar * 4 + 2 + i / 2, 0.45 + 0.12 * i, p.snare);
+        if (fill === 'toms') ['hi', 'hi', 'lo', 'lo'].forEach((t, i) => play(S.tom(t), bar * 4 + 3 + i / 4, 0.6 + 0.1 * i, p.snare));
+        if (fill === 'kickdrop' && k + 1 < L) play(S.revCrash(BEATs), bar * 4 + 3, 0.5, p.revcym);
+        /* the build's roll: snare (quarters, eighths, sixteenths, thirty-seconds) or the toms */
+        if (toDrop && B.roll !== 'none' && k >= L - B.rollBars) {
+          const r0 = L - B.rollBars, nseg = B.rollBars / 4, seg = Math.min(3, Math.floor((k - r0) / Math.max(1, B.rollBars / 4))), per = [1, 2, 4, 8][seg], cnt = (k === L - 1 ? 3.75 : 4) * per;
+          for (let i = 0; i < cnt; i++) {
+            const tb = bar * 4 + i / per, u = ((k - r0) * 4 + i / per) / (B.rollBars * 4 - 1);
+            if (B.roll === 'toms') play(S.tom(u < 0.5 ? 'hi' : 'lo'), tb, 0.35 + 0.6 * u, p.snare); else play(S.snare(Math.round(180 + 170 * u)), tb, 0.3 + 0.7 * Math.pow(u, 1.5), p.snare);
+          }
+          void nseg;
         }
-        /* the bass */
-        const ROLL = { roll: [[1, 0, 0.85], [2, 0, 1], [3, 12, 0.7]], gallop: [[1, 0, 0.8], [3, 0, 1], [2, 12, 0.6]], offroll: [[2, 0, 1], [3, 12, 0.75]] }[P.bassLine] || [[1, 0, 0.85], [2, 0, 1], [3, 12, 0.7]];
-        const bassRoll = name === 'groove' || name === 'drop' || (name === 'outro' && k < L / 2);
-        if (bassRoll) for (let bt = 0; bt < 4; bt++) ROLL.forEach(([s, add, v]) => { const st = play(S.bass(ch.root + add, 0.225), bar * 4 + bt + s / 4, v, p.bass); if (st != null && st >= 0) { const f = bassCut ? bassCut(bar + (bt + s / 4) / 4) : 700; bassSnap.setValueAtTime(f * 2, st); bassSnap.setTargetAtTime(0, st, 0.04); } });
-        if (name === 'build' && !(mv.concept === 'strip' && k >= L - 8) && k < L - (toDrop ? 0 : 0)) for (let bt = 0; bt < 4; bt++) if (!(toDrop && k === L - 1 && bt === 3)) play(S.bass(ch.root, 0.45), bar * 4 + bt + 0.5, 1, p.bass);
-        /* the arpeggio, from the fourth bar of the intro to the end */
-        if (!(name === 'intro' && k < Math.min(4, L / 4))) {
-          const tones = ch.arp;
-          P.arp.forEach((ix, s) => {
-            if (ix < 0) return;
-            const st = play(S.pluck(tones[ix]), bar * 4 + s / 4, 1, p.arp);
-            if (st != null && st >= 0) { const f = arpCut ? arpCut(bar + s / 16) : 1100; arpSnap.setValueAtTime(f * P.pluck.snap, st); arpSnap.setTargetAtTime(0, st, P.pluck.snapT); }
+        /* the bass: the section's line, the last bar of every four turned towards the next chord */
+        const bl = on('bass');
+        if (bl) {
+          let line = PB[bl] || PB.roll;
+          if (k % 4 === 3 && bl !== 'long') { const step = nch.root - ch.root; line = line.filter(([s]) => s < 12).concat([[12, 1.5, 7, 0.8], [14, 0.9, 12, 0.7], [15, 0.9, step + (step > 0 ? -1 : 1), 0.8]]); }
+          line.forEach(([s, len, add, v]) => {
+            if (gapBeat && s >= 12) return;
+            const st = play(S.bass(ch.root + add, Math.round(len * 25) / 100), bar * 4 + s / 4, v, p.bass);
+            if (st != null && st >= 0) { const f = bassCut ? bassCut(bar + s / 16) : 700; bassSnap.setValueAtTime(f * 2, st); bassSnap.setTargetAtTime(0, st, 0.04); }
           });
         }
-        /* drops: the crash and the hit the build chose, crashes every eight bars */
-        if (name === 'drop' && k === 0) { const h = dropD.hit || 'crashImpact'; if (h !== 'cut' && h !== 'impact' && h !== 'boom') play(S.crash(3), bar * 4, 1, p.crash); if (h === 'crashImpact' || h === 'impact' || h === 'boom') play(S.impact(), bar * 4, h === 'boom' ? 0.8 : 1, p.impact); }
-        if (name === 'drop' && k > 0 && k % 8 === 0) play(S.crash(3), bar * 4, 0.7, p.crash);
-        if (name === 'groove' && (k === 0 || k === L / 2)) play(S.crash(3), bar * 4, k ? 0.75 : 0.6, p.crash);
-        if (name === 'breakdown' && k === 0) { play(S.impact(), bar * 4, 0.6, p.impact); play(S.sweep(2, 8000, 250, false, 14), bar * 4, 1, p.sweeps); }
-        if (name === 'groove' && nx && nx.name === 'breakdown' && k === L - 4) play(S.sweep(4, 500, 7000, true, 13), bar * 4, 0.7, p.sweeps);
-        /* reversed cymbals into the groove, its half, the breakdown, and (two bars) the drop */
+        /* the arpeggio: the section's version of the record's figure, two bars long */
+        const ap = on('arp');
+        if (ap) {
+          const fig = PL.arps[ap] || PL.arps.A, half = (bar % 2) * 16;
+          for (let s = 0; s < 16; s++) {
+            const ix = fig[half + s]; if (ix < 0 || (gapBeat && s >= 12)) continue;
+            const st = play(S.pluck(ch.arp[ix % 5]), bar * 4 + s / 4, ap === 'S' ? 1.1 : 1, p.arp);
+            if (st != null && st >= 0) { const f = arpCut ? arpCut(bar + s / 16) : 1100; arpSnap.setValueAtTime(f * P.pluck.snap, st); arpSnap.setTargetAtTime(0, st, P.pluck.snapT); }
+          }
+        }
+        /* the piano breakdown's chords */
+        if (on('chords') && bar % PL.chordBars === 0) ch.notes.forEach((m, i) => play(S.keys(m, PL.chordBars * 4 * 0.95), bar * 4 + i * 0.02, 0.6, p.keys));
+        /* the drop's hit, and its crashes; the groove's crash; the breakdown's entry */
+        if (name === 'drop' && k === 0) { const h = sec.hit; if (h !== 'cut' && h !== 'impact' && h !== 'boom') play(S.crash(3), bar * 4, 1, p.crash); if (h === 'crashImpact' || h === 'impact' || h === 'boom') play(S.impact(), bar * 4, h === 'boom' ? 0.8 : 1, p.impact); }
+        if (name === 'drop' && k > 0 && k % (sec.crashEvery || 8) === 0) play(S.crash(3), bar * 4, 0.7, p.crash);
+        if (name === 'groove' && k === 0 && sec.n === 0) play(S.crash(3), bar * 4, 0.6, p.crash);
+        if (name === 'breakdown' && k === 0 && sec.entry === 'sweep') play(S.sweep(2, 8000, 250, false, 14), bar * 4, 1, p.sweeps);
+        if (name === 'breakdown' && k === 0 && (sec.entry === 'sweep' || sec.entry === 'impact')) play(S.impact(), bar * 4, 0.6, p.impact);
+        if (nx && nx.name === 'breakdown' && name !== 'build' && k === L - 4) play(S.sweep(4, 500, 7000, true, 13), bar * 4, 0.7, p.sweeps);
+        if (toDrop && B.sweepUp && k === L - 4) play(S.sweep(4, 500, 7000, true, 15), bar * 4, 0.8, p.sweeps);
         if (k === L - 1 && nx && (nx.name === 'groove' || nx.name === 'breakdown')) play(S.revCrash(BARs), (bar + 1) * 4 - 4, 0.5, p.revcym);
-        if (name === 'groove' && k === L / 2 - 1) play(S.revCrash(BARs), (bar + 1) * 4 - 4, 0.6, p.revcym);
         if (toDrop && k === L - 2) play(S.revCrash(2 * BARs), bar * 4, 1, p.revcym);
       }
-      /* the pad: every chord, every section */
-      if (bar % 2 === 0) play(S.pad(ch.notes, 2), bar * 4, 1, p.pad);
-      /* atmosphere under the intro and every breakdown */
-      if ((name === 'intro' || name === 'breakdown') && k === 0) play(S.atmos(name === 'intro' ? L + 4 : L, name === 'intro' ? 30 : 31 + sec.n), bar * 4, 1, p.atmos);
-      /* the riser over the build's last sixteen bars */
-      if (toDrop && k === Math.max(0, L - 16)) play(S.riser(Math.min(16, L) - 0.25), bar * 4, 1, p.riser);
-      /* the hook */
-      if (k % 8 === 0) {
-        const blk = k / 8;
-        if (name === 'groove' && k === L - 8 && sec.n === 0) playHook(bar, 'hook', p.keys, 0.35);
-        if (name === 'breakdown') { playHook(bar, 'hook', p.keys, blk === 0 ? 1 : 0.3, blk === 0 ? 0 : 12); if (blk >= 1 || L <= 8) playHook(bar, 'hook', p.lead, 0.7); }
-        if (name === 'build' && blk % 2 === 0 && k < L - 8) { if (mv.concept === 'melodic' && blk === 0) playHook(bar, 'hook', p.lead, 0.8, 0, 6); else playHook(bar, 'hook', p.lead, 0.9); }
-        if (name === 'build' && blk % 2 === 1 && k < L - 8) playHook(bar, 'open', p.keys, 0.6);
-        if (name === 'drop') {
-          /* the drop's eight-bar blocks: the hook (lead and keys an octave up), again, then the lead resting
-             while the keys say it, then the hook with its open ending; a later drop starts developed */
-          const plan = sec.n === 0 ? ['hook', 'hook', 'keys', 'open', 'hook', 'open'] : ['open', 'hook', 'keys', 'hook', 'open', 'hook'];
-          const w = plan[blk % plan.length];
-          if (w === 'keys') playHook(bar, 'hook', p.keys, 0.6, 12);
-          else { playHook(bar, w, p.lead, 1); playHook(bar, w, p.keys, 0.3, 12); }
-        }
+      /* the pad, the counter-melody, the air: held, so they may reach back before the segment */
+      if (onIn(sec, 'pad', k) && bar % PL.chordBars === 0) play(S.pad(ch.notes, PL.chordBars), bar * 4, 1, p.pad);
+      if (onIn(sec, 'counter', k)) {
+        const cyc = PL.chordBars * PL.H.length, pos = ((bar % cyc) + cyc) % cyc;
+        PL.counter.forEach(([bt, len, m]) => { if (Math.floor(bt / 4) === pos) play(S.counter(m, len * 0.95), bar * 4 + (bt - pos * 4), 0.9, p.counter); });
       }
+      if (onIn(sec, 'atmos', k) && k === (sec.on.atmos[0][0] || 0)) play(S.atmos(Math.max(4, sec.on.atmos[0][1] - sec.on.atmos[0][0] + 2), 30 + secs.indexOf(sec)), bar * 4, 1, p.atmos);
+      /* the riser over the build's last bars (when the build has one) */
+      if (toDrop && B.riser && k === Math.max(0, L - B.riserBars)) play(S.riser(Math.min(B.riserBars, L) - 0.25), bar * 4, 1, p.riser);
+      /* the hook, where the plan puts it */
+      sec.hooks.forEach((h) => { if (h.at === k) playHook(bar, h.which, h.voice === 'lead' ? p.lead : p.keys, h.g, h.tr || 0, h.only); });
     }
-    /* the gate on the pad in the build's last bars; the breath: everything but the tails, gone */
+    /* the gate on the pad where a build chops it; the breath: everything but the tails, gone */
     secs.forEach((s, i) => {
-      const nx = secs[i + 1]; if (s.name !== 'build' || !nx || nx.name !== 'drop') return;
-      const mv = tr.moves[s.n] || {}, gEnd = (s.start + s.len) * 4 - (mv.breathLen === 'half' ? 2 : mv.breathLen === 'eighth' ? 0.5 : 1);
-      const steps = [[(s.start + s.len - 8) * 4, (s.start + s.len - 2) * 4, 0.5], [(s.start + s.len - 2) * 4, gEnd, 0.25]];
-      steps.forEach(([b0, b1, st]) => {
-        for (let x = b0; x < b1 - 1e-6; x += st) {
-          const t = when(x), d = st * BEATs, r = 0.003;
-          if (t + d < 0 || t > T1) continue;
-          if (t >= 0) { gate.gain.setValueAtTime(0, t); gate.gain.linearRampToValueAtTime(1, t + r); gate.gain.setValueAtTime(1, t + 0.55 * d); gate.gain.linearRampToValueAtTime(0, t + 0.55 * d + r); }
-        }
-      });
+      const nx = secs[i + 1], B = s.build; if (s.name !== 'build' || !B) return;
+      const mv = tr.moves[s.n] || {}, gEnd = (s.start + s.len) * 4 - (B.breath ? (mv.breathLen === 'half' ? 2 : mv.breathLen === 'eighth' ? 0.5 : 1) : 0);
+      if (B.gate) {
+        const g0 = (s.start + B.gate[0]) * 4, g1 = (s.start + s.len) * 4, mid = Math.max(g0, g1 - 8);
+        [[g0, mid, 0.5], [mid, gEnd, 0.25]].forEach(([b0, b1, st]) => {
+          for (let x = b0; x < b1 - 1e-6; x += st) {
+            const t = when(x), d = st * BEATs, r = 0.003;
+            if (t + d < 0 || t > T1) continue;
+            if (t >= 0) { gate.gain.setValueAtTime(0, t); gate.gain.linearRampToValueAtTime(1, t + r); gate.gain.setValueAtTime(1, t + 0.55 * d); gate.gain.linearRampToValueAtTime(0, t + 0.55 * d + r); }
+          }
+        });
+        const tgate = when(g1); if (tgate > 0 && tgate < T1) gate.gain.setValueAtTime(1, tgate);
+      }
+      if (!B.breath || !nx || nx.name !== 'drop') return;
       const tg = when(gEnd), td = when((s.start + s.len) * 4);
       if (td > 0 && tg < T1) {
         if (tg > 0) { hush.gain.setValueAtTime(1, Math.max(0, tg - 0.004)); hush.gain.linearRampToValueAtTime(0, tg); }
         else hush.gain.setValueAtTime(0, 0);
-        gate.gain.setValueAtTime(1, Math.max(0, td));
         if (td < T1) { hush.gain.setValueAtTime(0, Math.max(0, td - 0.004)); hush.gain.linearRampToValueAtTime(1, td); }
       }
     });
@@ -1766,9 +2005,9 @@ window.VinylPlayer.Generative = (() => {
      balance, as a mix engineer's faders): measured part by part in a drop,
      over five records with different recordings, to a reference mix's balance (kick -13 dB rms,
      bass -17, pad -21, lead -19, arp -24, clap -10 peak, hats -16 ...) */
-  const PROG_LEVELS = { kick: 0.734, clap: 0.196, hats: 0.104, shaker: 0.0513, ride: 0.0716, perc: 0.0793, snare: 0.157, bass: 0.698,
-    pad: 0.803, arp: 0.288, lead: 0.472, keys: 0.36, atmos: 0.0667, crash: 0.264, impact: 0.402, revcym: 0.228,
-    sweeps: 0.139, riser: 0.231 };
+  const PROG_LEVELS = { counter: 0.3, kick: 0.924, clap: 0.196, hats: 0.114, shaker: 0.0513, ride: 0.0716, perc: 0.0793, snare: 0.157,
+    bass: 0.698, pad: 0.803, arp: 0.288, lead: 0.524, keys: 0.428, atmos: 0.0793, crash: 0.264, impact: 0.402,
+    revcym: 0.228, sweeps: 0.167, riser: 0.312 };
   /* the curves: for each section, where each filter and level starts and
      ends (and turns, in between), at bars; a section's start may jump from
      where the last one ended */
@@ -3272,7 +3511,7 @@ window.VinylPlayer.Generative = (() => {
   const famOf = (v) => (!v ? 'none' : SAMPLED[v] ? SAMPLED[v].fam : v === 'pluck' || v === 'blip' ? 'pluck' : v === 'bell' ? 'ring' : v === 'keys' || v === 'wurli' ? 'keys' : 'synth');
   const contourOf = (mel) => { const ns = (mel.hook || []).filter((v) => typeof v === 'number'); return ns.slice(1).map((v, i) => Math.sign(v - ns[i])).join(''); };
   const earOf = (tr) => ({ fam: famOf(tr.lead ? tr.leadVoice : null), motif: tr.mel.rhythm || '', contour: contourOf(tr.mel), prog: tr.prog.join(''),
-    moves: (tr.moves || []).map((m) => m.concept).join(','), counterFam: famOf(tr.counter), bpm: tr.bpm });
+    moves: (tr.moves || []).map((m) => m.concept).join(',') + (tr.plan ? '|' + tr.plan.form + '|' + tr.scripts.map((x) => x.v).join(',') : ''), counterFam: famOf(tr.counter), bpm: tr.bpm });
   function melodyScore(mel) {
     const notes = mel.hook.concat(mel.answer).filter((v) => typeof v === 'number');
     if (notes.length < 4) return -2;
