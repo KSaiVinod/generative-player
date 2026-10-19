@@ -930,6 +930,16 @@ window.VinylPlayer.Generative = (() => {
     /* (a style whose second leads all ring, minimal's bell: the counter gives way instead) */
     if (bright(tr.lead2) && bright(tr.counter)) tr.counter = pickIn((X.counter || []).filter((v) => counterOk(v) && !bright(v)));
     if (tr.shake && tr.beat.p.length >= 4) tr.shake = null;
+    /* progressive house: its own renderer, its own sounds (see renderProg) */
+    if (style === 'prog' && side !== 'b') {
+      tr.engine = 'prog'; tr.sr = PSR; tr.bpc = 2;
+      tr.patch = writeProgPatch(q);
+      tr.progHook = writeProgHook(q, tr);
+      tr.leadVoice = 'prog:' + tr.patch.lead.kind;
+      tr.samples = [];
+      tr.resolved = { lead: { want: tr.patch.lead.kind, played: tr.patch.lead.kind, source: 'synth' }, bass: { want: tr.patch.bass.kind, played: tr.patch.bass.kind, source: 'synth' } };
+      return tr;
+    }
     /* every sampled instrument this track will need loaded */
     const synthLead = { pluck: 1, supersaw: 1, bell: 1, acid: 1, keys: 1, sawlead: 1, squarelead: 1, wurli: 1, blip: 1, vox: 1 };
     const RESP_SAMPLES = { 'brass-hit': ['trumpet', 'trombone'], 'string-stab': ['violin'], 'guitar-lick': ['guitar-electric'], 'sax-lick': ['saxophone'] };
@@ -991,7 +1001,7 @@ window.VinylPlayer.Generative = (() => {
     return { name, bar: len - 1, len, n: (seen[name] || 1) - 1, next: null };
   }
   const barSec = (tr) => 240 / tr.bpm;
-  const totalOf = (tr) => Math.ceil(tr.bars * barSec(tr) * SR);
+  const totalOf = (tr) => Math.ceil(tr.bars * barSec(tr) * ((tr && tr.sr) || SR));
   const RPM = (n) => (n === 45 ? 45 : 33.33);
 
   /* ---- rendering (Tone.js) ------------------------------------------------
@@ -1167,7 +1177,7 @@ window.VinylPlayer.Generative = (() => {
      costs no more per bar than a short one. Returns the segment's stereo
      samples, from bar a, FADE past bar b unless it is the last. */
   const LEAD = 2, FADE = 1024;                     // (two bars: longer than any reverb's tail, at the slowest tempo)
-  const at = (tr, bar) => Math.round(bar * barSec(tr) * SR);          // a bar's first sample
+  const at = (tr, bar) => Math.round(bar * barSec(tr) * ((tr && tr.sr) || SR));   // a bar's first sample (at the record's own rate)
   /* the rest of the band's percussion and effects, the same for every kit,
      made once: hand drums, a cowbell, claves, a woodblock, a finger snap, a
      ride, three toms, an impact (a sub that drops away under a thud), and a
@@ -1230,7 +1240,662 @@ window.VinylPlayer.Generative = (() => {
     return extrasMade;
   }
 
+  /* ==== progressive house, made like a record =================================
+     Progressive house is not played on the shared band above: it has a
+     renderer of its own, built the way a producer builds a track. Every
+     sound is synthesised here, note by note, at 44.1 kHz - detuned
+     supersaw pads, plucks whose filter snaps on every note, an FM electric
+     piano with a bell in it, a saw-and-sine bass, a lead with a singer's
+     late vibrato, drums made from sine sweeps and filtered noise - and each
+     record draws its own versions of them (how many saws and how far apart,
+     the pluck's bite, the bell's colour, which kind of lead, the kick's
+     tone, the room's size and colour), so no two sound alike. It is then
+     mixed like a record: every part set to its level, each ducking under
+     the kick by its own amount, a hall, a room and a ping-pong echo, the
+     lows kept mono, glued, and limited with a look-ahead. Everything that
+     changes over the track (filters opening, the kick muffled and opening,
+     the music thinning into the gap) follows smooth curves over the whole
+     arrangement, worked out from the bar, so any part of the track can be
+     pressed alone and still meet its neighbours. */
+  const PSR = 44100;
+  const srOf = (tr) => (tr && tr.sr) || SR;
+  const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);
+  const undb = (d) => Math.pow(10, d / 20);
+
+  /* ---- signal pieces (on plain arrays, at PSR) ---- */
+  function noiseOf(n, seed) {
+    /* seeded gaussian noise (Box-Muller over the seeded random) */
+    const r = seeded(seed >>> 0), out = new Float32Array(n);
+    for (let i = 0; i < n; i += 2) {
+      const u = Math.max(1e-9, r()), v = r(), m = Math.sqrt(-2 * Math.log(u));
+      out[i] = m * Math.cos(2 * Math.PI * v); if (i + 1 < n) out[i + 1] = m * Math.sin(2 * Math.PI * v);
+    }
+    return out;
+  }
+  function coeffs(kind, f, q) {
+    f = Math.min(PSR * 0.45, Math.max(10, f));
+    const w = 2 * Math.PI * f / PSR, c = Math.cos(w), al = Math.sin(w) / (2 * q);
+    let b0, b1, b2;
+    if (kind === 'lp') { b0 = (1 - c) / 2; b1 = 1 - c; b2 = (1 - c) / 2; }
+    else if (kind === 'hp') { b0 = (1 + c) / 2; b1 = -(1 + c); b2 = (1 + c) / 2; }
+    else { b0 = al; b1 = 0; b2 = -al; }
+    const a0 = 1 + al;
+    return [b0 / a0, b1 / a0, b2 / a0, (-2 * c) / a0, (1 - al) / a0];
+  }
+  /* a biquad over x, in place; cutoff a number or a function of the sample (updated every 64) */
+  function biquad(x, kind, f, q) {
+    q = q || 0.707;
+    let z1 = 0, z2 = 0, k = typeof f === 'number' ? coeffs(kind, f, q) : null;
+    for (let i = 0; i < x.length; i++) {
+      if (!k || (typeof f !== 'number' && (i & 63) === 0)) k = coeffs(kind, typeof f === 'number' ? f : f(i), q);
+      const v = x[i], y = k[0] * v + z1;
+      z1 = k[1] * v - k[3] * y + z2; z2 = k[2] * v - k[4] * y; x[i] = y;
+    }
+    return x;
+  }
+  const band = (x, lo, hi) => biquad(biquad(x, 'hp', lo), 'lp', hi);
+  const hp4 = (x, f) => biquad(biquad(x, 'hp', f, 0.54), 'hp', f, 1.31);
+  /* a band-limited saw (PolyBLEP); freq a number or a function of the sample */
+  function saw(freq, n, ph) {
+    const out = new Float32Array(n), F = typeof freq === 'number';
+    ph = ph || 0;
+    for (let i = 0; i < n; i++) {
+      const dt = (F ? freq : freq(i)) / PSR;
+      let y = 2 * ph - 1;
+      if (ph < dt) { const t = ph / dt; y -= 2 * t - t * t - 1; }
+      else if (ph > 1 - dt) { const t = (ph - 1) / dt; y -= t * t + 2 * t + 1; }
+      out[i] = y; ph += dt; if (ph >= 1) ph -= 1;
+    }
+    return out;
+  }
+  function sine(freq, n, ph) {
+    const out = new Float32Array(n), F = typeof freq === 'number';
+    ph = ph || 0;
+    for (let i = 0; i < n; i++) { out[i] = Math.sin(2 * Math.PI * ph); ph += (F ? freq : freq(i)) / PSR; if (ph >= 1) ph -= 1; }
+    return out;
+  }
+  /* a square from two saws (band-limited too), its width w */
+  function square(freq, n, ph, w) {
+    const a = saw(freq, n, ph || 0), b = saw(freq, n, ((ph || 0) + (w || 0.5)) % 1);
+    for (let i = 0; i < n; i++) a[i] = (a[i] - b[i]) * 0.5;
+    return a;
+  }
+  /* an envelope: attack a, decay time constant d to sustain s, gate dur, release r (seconds) */
+  function adsr(dur, a, d, s, r) {
+    const on = Math.max(1, Math.round(dur * PSR)), nr = Math.round(r * PSR), e = new Float32Array(on + nr);
+    for (let i = 0; i < on; i++) { const t = i / PSR; e[i] = t < a ? t / a : s + (1 - s) * Math.exp(-(t - a) / d); }
+    const lv = e[on - 1];
+    for (let i = 0; i < nr; i++) e[on + i] = lv * Math.exp(-i / PSR / (r / 5));
+    for (let i = Math.max(0, e.length - 64), k = 0; i < e.length; i++, k++) e[i] *= 1 - k / 64;
+    return e;
+  }
+  const stereo = (n) => [new Float32Array(n), new Float32Array(n)];
+  /* several saws a few cents apart, spread across the field: the sound of trance and progressive */
+  function supersaw(midi, n, voices, cents, width, seed, vib, wave) {
+    const r = seeded(seed >>> 0), f0 = mtof(midi), [L, R] = stereo(n);
+    const pans = Array.from({ length: voices }, (_, i) => (voices > 1 ? -width + 2 * width * i / (voices - 1) : 0));
+    for (let i = pans.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [pans[i], pans[j]] = [pans[j], pans[i]]; }
+    for (let v = 0; v < voices; v++) {
+      const o = voices > 1 ? -1 + 2 * v / (voices - 1) : 0, f = f0 * Math.pow(2, o * cents / 1200);
+      const fr = vib ? (i) => f * vib(i) : f;
+      const x = wave === 'square' ? square(fr, n, r(), 0.5) : saw(fr, n, r());
+      const amp = Math.abs(o) < 1e-9 ? 1 : 0.75, th = (pans[v] + 1) * Math.PI / 4, cl = Math.cos(th) * amp, cr = Math.sin(th) * amp;
+      for (let i = 0; i < n; i++) { L[i] += x[i] * cl; R[i] += x[i] * cr; }
+    }
+    const k = 1 / Math.sqrt(voices);
+    for (let i = 0; i < n; i++) { L[i] *= k; R[i] *= k; }
+    return [L, R];
+  }
+  const shape = (x, e) => { for (let i = 0; i < x.length; i++) x[i] *= e[i] || 0; return x; };
+  const peakOf = (x) => { let m = 0; for (let i = 0; i < x.length; i++) m = Math.max(m, Math.abs(x[i])); return m || 1; };
+  const rmsOf = (x, n) => { let s = 0; n = Math.min(n || x.length, x.length); for (let i = 0; i < n; i++) s += x[i] * x[i]; return Math.sqrt(s / Math.max(1, n)) || 1e-9; };
+  const scale = (x, k) => { for (let i = 0; i < x.length; i++) x[i] *= k; return x; };
+  const toBuf = (chs) => { const b = new AudioBuffer({ length: chs[0].length, numberOfChannels: chs.length, sampleRate: PSR }); chs.forEach((c, i) => b.copyToChannel(c, i)); return b; };
+  const METAL = [205.3, 304.4, 369.6, 522.7, 540.0, 800.0];
+  function metal(n, k) {
+    const out = new Float32Array(n);
+    METAL.forEach((f, j) => { for (let i = 0; i < n; i++) out[i] += Math.sign(Math.sin(2 * Math.PI * f * k * i / PSR + j)) / 6; });
+    return out;
+  }
+
+  /* ---- this record's sounds ------------------------------------------------
+     A patch per record (writeProgPatch, from its seed): within bounds, so
+     every one is its own and every one is a good sound. */
+  function writeProgPatch(q) {
+    const r = (lo, hi) => lo + q() * (hi - lo), pick = (a) => a[Math.floor(q() * a.length)];
+    return {
+      pad: { voices: pick([5, 7, 7, 9]), cents: r(14, 32), width: r(0.6, 1), attack: r(0.35, 1.1), wave: pick(['saw', 'saw', 'saw', 'square']), bright: r(0.75, 1.3) },
+      pluck: { voices: pick([2, 3, 3, 4]), cents: r(5, 14), decay: r(0.07, 0.17), snap: r(2, 4.5), snapT: r(0.03, 0.08), wave: pick(['saw', 'saw', 'square']), octave: q() < 0.3 },
+      keys: { index: r(1.0, 2.2), bell: r(0.2, 0.55), ratio: pick([3.5, 3.5, 2, 4.1, 5]), decay: r(0.6, 1.3) },
+      lead: { kind: pick(['supersaw', 'supersaw', 'fmbell', 'square', 'strings']), voices: pick([5, 7, 7]), cents: r(10, 22), vibRate: r(4.6, 6), vibDepth: r(0.003, 0.006), attack: r(0.006, 0.04) },
+      bass: { kind: pick(['sawsine', 'sawsine', 'reese', 'square']), fenv: r(1.5, 3), decay: r(0.06, 0.13), sustain: r(0.4, 0.7) },
+      kick: { f0: r(46, 56), sweep: r(150, 230), punch: r(0.014, 0.028), decay: r(0.1, 0.17), click: r(0.2, 0.5), drive: r(1.5, 2.6) },
+      clap: pick(['clap', 'clap', 'snareclap']), hat: r(0.05, 0.12), hatHp: r(6000, 9000), ride: q() < 0.7, shaker: q() < 0.85,
+      perc: pick([[[3, 4], [6, 0], [10, 2], [14, 4]], [[2, 2], [7, 4], [11, 0]], [[3, 4], [5, 2], [10, 4], [13, 0], [15, 2]]]),
+      hall: { len: r(2.8, 4.2), bright: r(6000, 10000), dark: r(1200, 2000) }, delay: pick([0.75, 0.75, 0.5, 0.375]), fb: r(0.35, 0.5),
+      arp: pick([[0, 1, 2, 3, 2, 1, 2, 4, 0, 1, 2, 3, 2, 3, 4, 3], [0, 2, 1, 3, 2, 4, 3, 1, 0, 2, 1, 3, 4, 2, 3, 1], [0, 1, 2, 1, 3, 2, 4, 2, 0, 1, 2, 1, 3, 4, 3, 2],
+        [0, -1, 2, 1, -1, 3, 2, -1, 0, 4, 2, -1, 3, 1, 2, 4], [0, 1, 0, 2, 0, 3, 0, 4, 1, 2, 1, 3, 1, 4, 2, 3]]),
+      bassLine: pick(['roll', 'roll', 'gallop', 'offroll'])
+    };
+  }
+  const progCache = new Map();                       // a record's sounds, made once (two records kept: on the deck and next)
+  function progSounds(tr) {
+    if (progCache.has(tr.seed)) return progCache.get(tr.seed);
+    const P = tr.patch, BEATs = 60 / tr.bpm, BARs = BEATs * 4, memo = new Map();
+    const once = (key, make) => { if (!memo.has(key)) memo.set(key, make()); return memo.get(key); };
+    const S = {
+      kick: () => once('kick', () => {
+        const K = P.kick, n = Math.round(0.42 * PSR), x = new Float32Array(n);
+        const body = sine((i) => K.f0 + K.sweep * Math.exp(-i / PSR / K.punch) + 35 * Math.exp(-i / PSR / 0.1), n);
+        const click = hp4(noiseOf(n, tr.seed ^ 1), 1500);
+        for (let i = 0; i < n; i++) {
+          const t = i / PSR, amp = t < 0.05 ? 1 : Math.exp(-(t - 0.05) / K.decay);
+          x[i] = Math.tanh(K.drive * (body[i] * amp + click[i] * Math.exp(-t / 0.0025) * K.click)) / Math.tanh(K.drive) * Math.min(1, (n - i) / (0.01 * PSR));
+        }
+        return toBuf([x]);
+      }),
+      clap: () => once('clap', () => {
+        const n = Math.round(0.4 * PSR), x = band(noiseOf(n, tr.seed ^ 2), 900, 3200);
+        if (P.clap === 'snareclap') { const b = sine((i) => 190 * (1 + 0.6 * Math.exp(-i / PSR / 0.01)), n); for (let i = 0; i < n; i++) { const t = i / PSR; x[i] = Math.tanh(1.4 * (x[i] * Math.exp(-t / 0.11) + b[i] * Math.exp(-t / 0.05) * 0.6)); } }
+        else for (let i = 0; i < n; i++) {
+          const t = i / PSR;
+          let e = 0; [0, 0.010, 0.021].forEach((o) => { if (t >= o) e += Math.exp(-(t - o) / 0.0045); });
+          if (t >= 0.025) e += 0.7 * Math.exp(-(t - 0.025) / 0.08) * Math.min(1, (t - 0.025) / 0.003);
+          x[i] *= e;
+        }
+        return toBuf([scale(x, 1 / peakOf(x))]);
+      }),
+      hat: (decay) => once('hat' + decay, () => {
+        const n = Math.round(Math.min(0.6, decay * 7) * PSR), nz = noiseOf(n, tr.seed ^ 21), m = metal(n, 1), x = new Float32Array(n);
+        for (let i = 0; i < n; i++) x[i] = 0.6 * nz[i] + 0.5 * m[i];
+        hp4(x, P.hatHp);
+        for (let i = 0; i < n; i++) { const t = i / PSR; x[i] *= Math.exp(-t / decay) * Math.min(1, t / 0.0008); }
+        return toBuf([scale(x, 1 / peakOf(x))]);
+      }),
+      ride: () => once('ride', () => {
+        const n = Math.round(0.9 * PSR), nz = noiseOf(n, tr.seed ^ 5), m = metal(n, 2.7), x = new Float32Array(n);
+        for (let i = 0; i < n; i++) x[i] = 0.5 * nz[i] + 0.7 * m[i];
+        hp4(x, 4500);
+        for (let i = 0; i < n; i++) { const t = i / PSR; x[i] = x[i] * Math.exp(-t / 0.35) + (Math.sin(2 * Math.PI * 3150 * t) + 0.6 * Math.sin(2 * Math.PI * 4720 * t)) * Math.exp(-t / 0.25) * 0.15; }
+        return toBuf([scale(x, 1 / peakOf(x))]);
+      }),
+      shaker: () => once('shaker', () => {
+        const n = Math.round(0.09 * PSR), x = band(noiseOf(n, tr.seed ^ 6), 5500, 12000);
+        for (let i = 0; i < n; i++) { const t = i / PSR; x[i] *= Math.min(1, t / 0.006) * Math.exp(-t / 0.03); }
+        return toBuf([scale(x, 1 / peakOf(x))]);
+      }),
+      perc: (f) => once('perc' + f, () => {
+        const n = Math.round(0.25 * PSR), tone = sine((i) => f * (1 + 0.5 * Math.exp(-i / PSR / 0.008)), n), tick = band(noiseOf(n, tr.seed ^ 7), 2000, 6000), x = new Float32Array(n);
+        for (let i = 0; i < n; i++) { const t = i / PSR; x[i] = tone[i] * Math.exp(-t / 0.07) + tick[i] * Math.exp(-t / 0.004) * 0.2; }
+        return toBuf([scale(x, 1 / peakOf(x))]);
+      }),
+      snare: (tone) => once('snare' + tone, () => {
+        const n = Math.round(0.3 * PSR), body = sine((i) => tone * (1 + 0.6 * Math.exp(-i / PSR / 0.01)), n), sn = band(noiseOf(n, tr.seed ^ 8), 1500, 8000), x = new Float32Array(n);
+        for (let i = 0; i < n; i++) { const t = i / PSR; x[i] = Math.tanh(1.5 * (body[i] * Math.exp(-t / 0.06) * 0.7 + sn[i] * Math.exp(-t / 0.1))); }
+        return toBuf([scale(x, 1 / peakOf(x))]);
+      }),
+      crash: (len) => once('crash' + len, () => {
+        const n = Math.round(len * PSR), chs = [9, 10].map((s) => {
+          const nz = noiseOf(n, tr.seed ^ s), m = metal(n, 2.3), x = new Float32Array(n);
+          for (let i = 0; i < n; i++) x[i] = 0.7 * nz[i] + 0.5 * m[i];
+          hp4(x, 3000);
+          for (let i = 0; i < n; i++) { const t = i / PSR; x[i] *= Math.min(1, t / 0.002) * Math.exp(-t / (len / 4)); }
+          return x;
+        });
+        const k = 1 / Math.max(peakOf(chs[0]), peakOf(chs[1]));
+        return toBuf(chs.map((c) => scale(c, k)));
+      }),
+      revCrash: (len) => once('rev' + len, () => { const b = S.crash(len), chs = [0, 1].map((c) => b.getChannelData(c).slice().reverse()); return toBuf(chs); }),
+      impact: () => once('impact', () => {
+        const n = Math.round(2.5 * PSR), boom = sine((i) => 32 + 45 * Math.exp(-i / PSR / 0.25), n), thud = biquad(noiseOf(n, tr.seed ^ 11), 'lp', 250), x = new Float32Array(n);
+        for (let i = 0; i < n; i++) { const t = i / PSR; x[i] = Math.tanh(1.6 * (boom[i] * Math.exp(-t / 0.7) + thud[i] * Math.exp(-t / 0.25) * 2)) * Math.min(1, (n - i) / (0.05 * PSR)); }
+        return toBuf([scale(x, 1 / peakOf(x))]);
+      }),
+      /* a noise band sweeping (up into a section, down out of one), and the riser: the sweep with a saw climbing under it */
+      sweep: (bars, f0, f1, up, seed) => once('sw' + bars + f0 + f1 + seed, () => {
+        const n = Math.round(bars * BARs * PSR), chs = [0, 1].map((c) => {
+          const x = noiseOf(n, tr.seed ^ seed ^ c * 77);
+          biquad(x, 'bp', (i) => f0 * Math.pow(f1 / f0, up ? Math.pow(i / n, 1.3) : i / n), 1.2);
+          for (let i = 0; i < n; i++) { const u = i / n; x[i] *= up ? u * u : Math.min(1, u / 0.01) * (1 - u) * (1 - u); }
+          return x;
+        });
+        const k = 1 / Math.max(peakOf(chs[0]), peakOf(chs[1]));
+        return toBuf(chs.map((c) => scale(c, k)));
+      }),
+      riser: (bars) => once('riser' + bars, () => {
+        const n = Math.round(bars * BARs * PSR), cut = (i) => 300 * Math.pow(30, Math.pow(i / n, 1.3));
+        const tone = biquad(saw((i) => mtof(57 + tr.key) * Math.pow(2, 2 * Math.pow(i / n, 1.5)), n), 'lp', cut);
+        const chs = [0, 1].map((c) => {
+          const x = biquad(noiseOf(n, tr.seed ^ 12 ^ c * 91), 'bp', cut, 1.2);
+          for (let i = 0; i < n; i++) { const u = i / n; x[i] = x[i] * u * u + 0.25 * tone[i] * u * u; }
+          return x;
+        });
+        const k = 1 / Math.max(peakOf(chs[0]), peakOf(chs[1]));
+        return toBuf(chs.map((c) => scale(c, k)));
+      }),
+      atmos: (bars, seed) => once('at' + bars + seed, () => {
+        const n = Math.round(bars * BARs * PSR), chs = [0, 1].map((c) => {
+          const x = biquad(noiseOf(n, tr.seed ^ seed ^ c * 13), 'lp', (i) => 900 * Math.pow(2, Math.sin(2 * Math.PI * (i / n) * 2)), 1.5);
+          for (let i = 0; i < n; i++) { const u = i / n; x[i] *= Math.min(1, u / 0.25) * Math.min(1, (1 - u) / 0.25); }
+          return x;
+        });
+        const k = 1 / Math.max(rmsOf(chs[0]), rmsOf(chs[1]));
+        return toBuf(chs.map((c) => scale(c, k * 0.25)));
+      }),
+      /* the pad: a chord of supersaws, held for its chord's length */
+      pad: (notes, bars) => once('pad' + notes.join(',') + 'x' + bars, () => {
+        const A = P.pad, env = adsr(bars * BARs, A.attack, 0.8, 0.85, 1.8), n = env.length, [L, R] = stereo(n);
+        notes.forEach((m) => { const [l, r] = supersaw(m, n, A.voices, A.cents, A.width, tr.seed ^ (100 + m), null, A.wave); for (let i = 0; i < n; i++) { L[i] += l[i] * env[i]; R[i] += r[i] * env[i]; } });
+        const k = 0.25 / Math.max(rmsOf(L, Math.round(BARs * PSR)), 1e-6) * 0.25;
+        return toBuf([scale(L, k), scale(R, k)]);
+      }),
+      pluck: (m) => once('pl' + m, () => {
+        const A = P.pluck, env = adsr(BEATs / 4 * 0.85, 0.002, A.decay, 0, 0.06), n = env.length;
+        const [L, R] = supersaw(m, n, A.voices, A.cents, 0.6, tr.seed ^ (200 + m), null, A.wave);
+        if (A.octave) { const [l2, r2] = supersaw(m + 12, n, 2, A.cents, 0.4, tr.seed ^ (260 + m)); for (let i = 0; i < n; i++) { L[i] += 0.4 * l2[i]; R[i] += 0.4 * r2[i]; } }
+        shape(L, env); shape(R, env);
+        const k = 0.5 / Math.max(peakOf(L), peakOf(R));
+        return toBuf([scale(L, k), scale(R, k)]);
+      }),
+      bass: (m, beats) => once('b' + m + 'x' + beats, () => {
+        const A = P.bass, env = adsr(beats * BEATs, 0.003, A.decay, A.sustain, 0.02), n = env.length, x = new Float32Array(n);
+        const s1 = sine(mtof(m), n);
+        const top = A.kind === 'square' ? square(mtof(m + 12), n, 0.1, 0.35) : saw(mtof(m + 12), n, 0.2);
+        const top2 = A.kind === 'reese' ? saw(mtof(m + 12) * 1.012, n, 0.6) : null;
+        for (let i = 0; i < n; i++) x[i] = (0.55 * top[i] + (top2 ? 0.45 * top2[i] : 0) + 0.9 * s1[i]) * env[i];
+        return toBuf([scale(x, 0.6 / peakOf(x))]);
+      }),
+      lead: (m, beats) => once('ld' + m + 'x' + beats, () => {
+        const A = P.lead, env = adsr(beats * BEATs, A.attack, 0.25, 0.7, 0.35), n = env.length;
+        const vib = (i) => { const t = i / PSR; return 1 + A.vibDepth * Math.sin(2 * Math.PI * A.vibRate * t) * Math.min(1, Math.max(0, (t - 0.18) / 0.3)); };
+        let L, R;
+        if (A.kind === 'fmbell') {
+          [L, R] = stereo(n);
+          for (let i = 0; i < n; i++) {
+            const t = i / PSR, w = 2 * Math.PI * mtof(m) * t, idx = 2.4 * Math.exp(-t / 0.4) + 0.4;
+            const y = Math.sin(w + idx * Math.sin(3.01 * w)) * 0.7 + Math.sin(2 * w + 0.6 * Math.sin(w)) * 0.25;
+            L[i] = y; R[i] = y;
+          }
+        } else if (A.kind === 'square') {
+          const a = square((i) => mtof(m) * vib(i), n, 0, 0.42), b = square((i) => mtof(m) * 1.004 * vib(i), n, 0.3, 0.38);
+          biquad(a, 'lp', 3800); biquad(b, 'lp', 3800);
+          L = a; R = b;
+        } else {
+          [L, R] = supersaw(m, n, A.kind === 'strings' ? 9 : A.voices, A.kind === 'strings' ? 30 : A.cents, 0.8, tr.seed ^ (300 + m), vib);
+          const sub = saw((i) => mtof(m - 12) * vib(i), n, 0.3);
+          for (let i = 0; i < n; i++) { L[i] += 0.35 * sub[i]; R[i] += 0.35 * sub[i]; }
+          if (A.kind === 'strings') { biquad(L, 'lp', 3200); biquad(R, 'lp', 3200); }
+        }
+        const e = A.kind === 'strings' ? adsr(beats * BEATs, 0.25, 0.4, 0.85, 0.6) : env;
+        const N2 = Math.min(n, e.length);
+        const l2 = L.subarray(0, N2), r2 = R.subarray(0, N2); shape(l2, e); shape(r2, e);
+        const k = 0.5 / Math.max(peakOf(l2), peakOf(r2));
+        return toBuf([scale(l2.slice(), k), scale(r2.slice(), k)]);
+      }),
+      keys: (m, beats) => once('k' + m + 'x' + beats, () => {
+        const A = P.keys, env = adsr(beats * BEATs, 0.003, A.decay, 0.35, 1.4), n = env.length, [L, R] = stereo(n);
+        [0.998, 1.002].forEach((det, c) => {
+          const o = c ? R : L;
+          for (let i = 0; i < n; i++) {
+            const t = i / PSR, w = 2 * Math.PI * mtof(m) * det * t;
+            o[i] = (Math.sin(w + (0.25 + A.index * Math.exp(-t / 0.3)) * Math.sin(w)) + Math.sin(w + 0.9 * Math.exp(-t / 0.15) * Math.sin(A.ratio * w)) * Math.exp(-t / 0.6) * A.bell) * env[i];
+          }
+        });
+        const k = 0.5 / Math.max(peakOf(L), peakOf(R));
+        return toBuf([scale(L, k), scale(R, k)]);
+      }),
+      /* the hall and the room: noise, darkening as it decays */
+      ir: (len, pre, bright, dark, seed) => once('ir' + len + seed, () => {
+        const n = Math.round(len * PSR), p = Math.round(pre * PSR), chs = [0, 1].map((c) => {
+          const x = biquad(noiseOf(n, seed ^ c * 101), 'lp', (i) => bright * Math.pow(dark / bright, i / n));
+          let e = 0; for (let i = 0; i < n; i++) { const t = i / PSR; x[i] *= Math.exp(-6.9 * t / len) * Math.min(1, t / 0.012); e += x[i] * x[i]; }
+          const o = new Float32Array(n + p); o.set(scale(x, 1 / Math.sqrt(e)), p); return o;
+        });
+        return toBuf(chs);
+      })
+    };
+    progCache.set(tr.seed, S);
+    while (progCache.size > 2) progCache.delete(progCache.keys().next().value);
+    return S;
+  }
+
+  /* ---- this record's harmony and hook ----------------------------------------
+     The chords coloured as a producer voices them - a ninth on the minor
+     chords, a major seventh on the major ones that have it (a ninth on the
+     others) - led smoothly from one to the next; the arpeggio's tones; the
+     bass roots. The hook: eight bars, one motif rhythm coming back, rising
+     to a first peak, answering down, climbing to the record's highest note,
+     then home, held. Degrees of the scale, so any key and mode. */
+  function progHarmony(tr) {
+    const sc = SCALES[tr.scale] || SCALES.minor, T = 57 + tr.key;
+    const pitch = (d) => sc[((d % 7) + 7) % 7] + 12 * Math.floor(d / 7);
+    let prev = null;
+    return tr.prog.map((d) => {
+      const third = (pitch(d + 2) - pitch(d) + 12) % 12, sev = (pitch(d + 6) - pitch(d) + 12) % 12;
+      const colour = third === 4 && sev === 11 ? d + 6 : d + 8;            // maj7 where it is major-seventh, else the ninth
+      let notes = [d, d + 2, d + 4, colour].map((x) => T + pitch(x)).map((n) => { while (n > 71) n -= 12; while (n < 52) n += 12; return n; }).sort((x, y) => x - y);
+      if (prev) {
+        const cands = [];
+        for (let k = 0; k < 4; k++) { const inv = notes.slice(k).concat(notes.slice(0, k).map((x) => x + 12)); cands.push(inv, inv.map((x) => x - 12)); }
+        const ok = cands.filter((c) => c[0] >= 50 && c[3] <= 74).sort((x, y) => x.reduce((s, v, j) => s + Math.abs(v - prev[j]), 0) - y.reduce((s, v, j) => s + Math.abs(v - prev[j]), 0));
+        if (ok.length) notes = ok[0];
+      }
+      prev = notes;
+      let root = T + pitch(d); while (root > 40) root -= 12; while (root < 28) root += 12;
+      const arp = [d, d + 2, d + 4].map((x) => { let n = T + 12 + pitch(x); while (n > 77) n -= 12; while (n < 64) n += 12; return n; }).sort((x, y) => x - y);
+      return { notes, root, arp: [arp[0], arp[1], arp[2], arp[0] + 12, arp[1] + 12], deg: d };
+    });
+  }
+  const PCELLS = [[1.5, 0.5, 1, 1], [2, 1, 1], [1, 1, 2], [1.5, 0.5, 2], [1, 0.5, 0.5, 1, 1], [2, 2], [1, 1, 1, 1], [3, 1], [0.5, 0.5, 1, 2], [1.5, 1.5, 1]];
+  function writeProgHook(q, tr) {
+    const pick = (a) => a[Math.floor(q() * a.length)], wob = () => Math.round((q() - 0.5) * 2);
+    const c1 = pick(PCELLS), c2 = pick(PCELLS), c3 = pick(PCELLS), c4 = pick(PCELLS);
+    const bars = [c1, c2, c1, c3, c1, c4, q() < 0.6 ? c1 : pick(PCELLS), [4]];
+    const s = pick([4, 2, 4, 3]), peak = s + pick([4, 5, 5, 6]);
+    /* where the line is heading, beat by beat: up to a first peak, down in the answer, up to the highest, home */
+    const A = [[0, s], [3, s + 3 + wob()], [6, s + 1], [8, s], [11, s + 1 + wob()], [14, s - 2 - (q() < 0.5 ? 1 : 0)], [16, s], [19, s + 3], [20.5, peak], [22, s + 3 + wob()], [24, s + 1], [27, s + 3], [28, 7]];
+    const target = (b) => { for (let i = 1; i < A.length; i++) if (b <= A[i][0]) { const [x0, y0] = A[i - 1], [x1, y1] = A[i]; return y0 + (y1 - y0) * (b - x0) / (x1 - x0); } return 7; };
+    const out = [];
+    bars.forEach((cell, bi) => {
+      let beat = bi * 4;
+      cell.forEach((len) => {
+        let d = Math.round(target(beat));
+        /* on the strong beats, a tone of the chord under it (the chords change every two bars) */
+        if (beat % 2 === 0) {
+          const cd = tr.prog[Math.floor(beat / 8) % tr.prog.length], tones = [0, 2, 4].map((k) => (((cd + k) % 7) + 7) % 7);
+          let best = d, bd = 9; for (let x = d - 2; x <= d + 2; x++) if (tones.indexOf(((x % 7) + 7) % 7) >= 0 && Math.abs(x - d) < bd) { bd = Math.abs(x - d); best = x; }
+          d = best;
+        }
+        const n = out.length;
+        if (n >= 2 && out[n - 1][2] === d && out[n - 2][2] === d) d += target(beat + 1) > d ? 1 : -1;       // not three the same
+        out.push([beat, len, d]);
+        beat += len;
+      });
+    });
+    out[out.length - 1][2] = 7;                        // home, held
+    /* the answer that does not close: the last two bars to the fifth, left open */
+    const open = out.map((x) => x.slice());
+    const k = open.findIndex((x) => x[0] >= 24);
+    for (let i = k; i < open.length; i++) open[i][2] = i === open.length - 1 ? 4 : Math.round((open[i][2] + 4) / 2);
+    return { hook: out, open };
+  }
+
+  /* ---- the record, pressed: one segment of it -------------------------------- */
+  /* the look-ahead brickwall on the finished segment: gain from the loudest
+     moment a little ahead, held, smoothed (ceiling in dBFS) */
+  function lookahead(L, R, ceil) {
+    const n = L.length, c = undb(ceil), g = new Float32Array(n);
+    for (let i = 0; i < n; i++) { const p = Math.max(Math.abs(L[i]), Math.abs(R[i])); g[i] = p > c ? c / p : 1; }
+    const look = Math.round(0.003 * PSR), hold = Math.round(0.05 * PSR), sm = Math.round(0.012 * PSR), W = look + hold;
+    /* the minimum over the window ahead (a deque), then a moving average twice */
+    const m = new Float32Array(n), dq = new Int32Array(n + W + 1); let h = 0, t = 0;
+    for (let i = n - 1, j = n - 1; i >= 0; i--) {
+      while (j >= 0 && j >= i - look) { while (t > h && g[dq[t - 1]] >= g[j]) t--; dq[t++] = j; j--; }
+      while (t > h && dq[h] > i + hold) h++;
+      m[i] = g[dq[h]];
+    }
+    const box = (x, w) => { const o = new Float32Array(n); let s = 0; for (let i = 0; i < n; i++) { s += x[i]; if (i >= w) s -= x[i - w]; o[i] = s / Math.min(i + 1, w); } return o; };
+    const G = box(box(m, sm), sm);
+    for (let i = 0; i < n; i++) { const k = Math.min(G[i], m[i]); L[i] *= k; R[i] *= k; }
+  }
+  function renderProg(tr, a, b) {
+    const S = progSounds(tr), P = tr.patch, H = tr.harm || (tr.harm = progHarmony(tr));
+    const BEATs = 60 / tr.bpm, BARs = BEATs * 4;
+    const from = Math.max(0, Math.floor((a - 2) / 2) * 2), end = Math.min(b + 1, tr.bars), last = b >= tr.bars;
+    const t0 = from * BARs, skip = at(tr, a) - at(tr, from), want = at(tr, b) - at(tr, a) + (last ? 0 : FADE);
+    const LOOK = Math.round(0.1 * PSR), total = skip + want + LOOK;
+    const ctx = new OfflineAudioContext(2, total, PSR), T1 = total / PSR;
+    /* the sections, and where in them a bar is */
+    const secs = []; { let x = 0, seen = {}; tr.arr.forEach(([name, len]) => { secs.push({ name, start: x, len, n: seen[name] || 0 }); seen[name] = (seen[name] || 0) + 1; x += len; }); }
+    const secOf = (bar) => secs.find((s) => bar >= s.start && bar < s.start + s.len) || secs[secs.length - 1];
+    const chordAtBar = (bar) => H[Math.floor(bar / 2) % H.length];
+    const when = (beatAbs) => beatAbs * BEATs - t0;
+    /* ---- the graph ---- */
+    const G = (v) => { const g = ctx.createGain(); g.gain.value = v == null ? 1 : v; return g; };
+    const F = (type, f, q) => { const x = ctx.createBiquadFilter(); x.type = type; x.frequency.value = f; x.Q.value = q || 0.707; return x; };
+    const chain = (...ns) => { for (let i = 1; i < ns.length; i++) ns[i - 1].connect(ns[i]); return ns[ns.length - 1]; };
+    const out = G(1); out.connect(ctx.destination);
+    const glue = ctx.createDynamicsCompressor(); glue.threshold.value = -16; glue.ratio.value = 2; glue.knee.value = 6; glue.attack.value = 0.03; glue.release.value = 0.2;
+    const master = G(tr.progGain || 1);
+    /* the lows kept mono: the side channel high-passed at 140 Hz */
+    const msIn = G(1), split = ctx.createChannelSplitter(2), merge = ctx.createChannelMerger(2);
+    msIn.connect(split);
+    const mid = G(1), sideL = G(0.5), sideR = G(-0.5), side = G(1), inv = G(-1);
+    const midL = G(0.5), midR = G(0.5); split.connect(midL, 0); split.connect(midR, 1); midL.connect(mid); midR.connect(mid);
+    split.connect(sideL, 0); split.connect(sideR, 1); sideL.connect(side); sideR.connect(side);
+    const sideHP = chain(side, F('highpass', 140, 0.707));
+    mid.connect(merge, 0, 0); mid.connect(merge, 0, 1); sideHP.connect(merge, 0, 0); sideHP.connect(inv); inv.connect(merge, 0, 1);
+    chain(merge, F('highpass', 28, 0.707), glue, master, out);
+    const hush = G(1); hush.connect(msIn);
+    const tail = G(1); tail.connect(msIn);                         // rings through the breath
+    const music = G(1), musicHP = F('highpass', 20, 0.707); chain(music, musicHP, hush);
+    const rest = G(1); rest.connect(hush);
+    /* the spaces: a hall, a room, a ping-pong echo into the hall */
+    const hall = ctx.createConvolver(); hall.normalize = false; hall.buffer = S.ir(P.hall.len, 0.03, P.hall.bright, P.hall.dark, tr.seed ^ 40);
+    const room = ctx.createConvolver(); room.normalize = false; room.buffer = S.ir(1.1, 0.01, 9000, 3000, tr.seed ^ 41);
+    const hallIn = G(1), roomIn = G(1), dlyIn = G(1), hallDuck = G(1);
+    chain(hallIn, hall, hallDuck, music);
+    chain(roomIn, room, rest);
+    {
+      const d = P.delay * BEATs, hp = F('highpass', 300, 0.5), dl = ctx.createDelay(2), dr = ctx.createDelay(2), fl = F('lowpass', 3500), fr = F('lowpass', 3500), fbL = G(P.fb), fbR = G(P.fb), pm = ctx.createChannelMerger(2), ret = G(1);
+      dl.delayTime.value = d; dr.delayTime.value = d;
+      const mono = G(1); mono.channelCountMode = 'explicit'; mono.channelCount = 1; mono.channelInterpretation = 'speakers';
+      chain(dlyIn, mono, hp, dl, fl); fl.connect(fbL); fbL.connect(dr); chain(dr, fr); fr.connect(fbR); fbR.connect(dl);
+      fl.connect(pm, 0, 1); fr.connect(pm, 0, 0); chain(pm, ret); ret.connect(music); const toHall = G(0.3); ret.connect(toHall); toHall.connect(hallIn);
+    }
+    /* each part: its filter, its level, its duck, its sends */
+    const part = (dest, lvl, sends, filt) => {
+      const inp = G(1), shapeG = G(1), gain = G(lvl), duck = G(1), outG = G(1);
+      chain(inp, ...(filt ? [filt] : []), shapeG, gain, duck, outG);
+      outG.connect(dest);
+      Object.entries(sends || {}).forEach(([k, v]) => { const s = G(v); outG.connect(s); s.connect(k === 'hall' ? hallIn : k === 'room' ? roomIn : dlyIn); });
+      return { inp, shapeG, gain, duck, outG, filt };
+    };
+    const LV = tr.progLevels || PROG_LEVELS;
+    const solo = tr.solo, lv = (k) => (solo && solo !== k ? 0 : LV[k]);
+    const kickF = F('lowpass', 19000, 0.707), padF = F('lowpass', 1400, 0.9), arpF = F('lowpass', 1100, 1.0), bassF = F('lowpass', 700, 1.1), leadF = F('lowpass', 3500, 0.8), keysF = F('lowpass', 7000), snareF = F('highpass', 40);
+    const p = {
+      kick: part(rest, lv('kick'), null, kickF), clap: part(rest, lv('clap'), { room: 0.3 }), hats: part(rest, lv('hats'), { room: 0.08 }),
+      shaker: part(rest, lv('shaker')), ride: part(rest, lv('ride')), perc: part(rest, lv('perc'), { hall: 0.2, delay: 0.35 }), snare: part(rest, lv('snare'), { room: 0.3 }, snareF),
+      bass: part(rest, lv('bass'), null, bassF), pad: part(music, lv('pad'), { hall: 0.35 }, padF), arp: part(music, lv('arp'), { hall: 0.25, delay: 0.3 }, arpF),
+      lead: part(music, lv('lead'), { hall: 0.3, delay: 0.22 }, leadF), keys: part(music, lv('keys'), { hall: 0.5, delay: 0.3 }, keysF), atmos: part(rest, lv('atmos'), { hall: 0.4 }),
+      crash: part(rest, lv('crash'), { hall: 0.3 }), impact: part(tail, lv('impact'), { hall: 0.3 }), revcym: part(tail, lv('revcym')), sweeps: part(rest, lv('sweeps')), riser: part(tail, lv('riser'))
+    };
+    /* the gate (the build's chopped chords) sits between the pad's duck and its output */
+    const gate = G(1); p.pad.duck.disconnect(); p.pad.duck.connect(gate); gate.connect(p.pad.outG);
+    /* ---- smooth curves over the arrangement (values at bars, interpolated) ---- */
+    const curves = progCurves(tr, secs);
+    const automate = (param, name, logScale) => {
+      const pts = curves[name]; if (!pts) return;
+      const val = (bar) => {
+        let i = 1; while (i < pts.length && pts[i][0] < bar) i++;
+        if (i >= pts.length) return pts[pts.length - 1][1];
+        const [x0, y0] = pts[i - 1], [x1, y1] = pts[i]; if (bar <= x0) return y0;
+        const u = (bar - x0) / Math.max(1e-6, x1 - x0);
+        return logScale ? y0 * Math.pow(y1 / y0, u) : y0 + (y1 - y0) * u;
+      };
+      param.setValueAtTime(val(from), 0);
+      for (let t = BEATs / 4; t < T1; t += BEATs / 4) param.linearRampToValueAtTime(val(from + t / BARs), t);
+      return val;
+    };
+    const padCut = automate(padF.frequency, 'padCut', true), arpCut = automate(arpF.frequency, 'arpCut', true), bassCut = automate(bassF.frequency, 'bassCut', true);
+    automate(leadF.frequency, 'leadCut', true); automate(keysF.frequency, 'keysCut', true); automate(kickF.frequency, 'kickCut', true);
+    automate(snareF.frequency, 'snareHP', true); automate(musicHP.frequency, 'musicHP', true);
+    automate(p.pad.shapeG.gain, 'padGain'); automate(p.arp.shapeG.gain, 'arpGain'); automate(p.lead.shapeG.gain, 'leadGain');
+    /* per-note filter snaps: added to the cutoff, decaying */
+    const snapper = (filter) => { const c = ctx.createConstantSource(); c.offset.value = 0; c.connect(filter.frequency); c.start(0); return c.offset; };
+    const arpSnap = snapper(arpF), bassSnap = snapper(bassF);
+    /* ---- the playing ---- */
+    const play = (buf, beatAbs, g, dest, rate) => {
+      const st = when(beatAbs); if (st >= T1 || st + buf.duration / (rate || 1) <= 0) return null;
+      const src = ctx.createBufferSource(); src.buffer = buf; if (rate) src.playbackRate.value = rate;
+      const v = ctx.createGain(); v.gain.value = g; src.connect(v); v.connect(dest.inp || dest);
+      if (st >= 0) src.start(st); else src.start(0, -st * (rate || 1));
+      return st;
+    };
+    const duckCurve = (depth, Lb) => { const n = 96, c = new Float32Array(n); for (let k = 0; k < n; k++) { const u = k / (n - 1), a = Math.min(1, u * Lb * BEATs / 0.003); c[k] = 1 - depth * a * 0.5 * (1 + Math.cos(Math.PI * u)); } c[n - 1] = 1; return c; };
+    const DUCKS = [[p.bass.duck, duckCurve(0.6, 0.5), 0.5], [p.pad.duck, duckCurve(0.55, 0.75), 0.75], [p.arp.duck, duckCurve(0.4, 0.75), 0.75], [p.lead.duck, duckCurve(0.35, 0.75), 0.75], [hallDuck, duckCurve(0.45, 0.75), 0.75]];
+    const rnd = (bar, salt) => seeded((tr.seed ^ Math.imul(bar + 1, 0x9E3779B1) ^ salt) >>> 0);
+    const hook = tr.progHook;
+    const tonic = 69 + tr.key, sc = SCALES[tr.scale] || SCALES.minor, mel = (d) => tonic + sc[((d % 7) + 7) % 7] + 12 * Math.floor(d / 7);
+    const playHook = (startBar, which, dest, g, transpose, only) => {
+      (which === 'open' ? hook.open : hook.hook).forEach(([bt, len, d], i) => {
+        if (only != null && i >= only) return;
+        const bAbs = startBar * 4 + bt, bar = Math.floor(bAbs / 4); if (bar < from - 20 || bar >= end) return;
+        const buf = dest === p.lead ? S.lead(mel(d) + (transpose || 0), len) : S.keys(mel(d) + (transpose || 0), len);
+        play(buf, bAbs, g, dest);
+      });
+    };
+    for (let bar = Math.max(0, from - 20); bar < end; bar++) {
+      const sec = secOf(bar), k = bar - sec.start, L = sec.len, name = sec.name, nx = secs[secs.indexOf(sec) + 1], toDrop = name === 'build' && nx && nx.name === 'drop';
+      const ch = chordAtBar(bar), R = rnd(bar, 0x77), longEvent = bar < from;
+      const mv = name === 'build' ? (tr.moves[sec.n] || tr.moves[0] || {}) : null;
+      const dropD = name === 'drop' ? (tr.drops[sec.n] || {}) : null;
+      /* which parts play this bar */
+      const kickOn = (name === 'intro' && k >= L / 2) || name === 'groove' || name === 'drop' || (name === 'outro' && k < L - 1) || (name === 'build' && !(mv.concept === 'strip' && k >= L - 8));
+      const backbeat = name === 'groove' || name === 'drop' || (name === 'build' && k < L - 1) || (name === 'outro' && k < L * 0.75);
+      const hatsOn = (name === 'intro' && k >= L * 0.75) || name === 'groove' || name === 'drop' || name === 'build' || (name === 'outro' && k < L * 0.75);
+      const fillBar = name === 'groove' && (k % 16 === 15 || k === L - 1);
+      /* (only the long events reach back before the segment: the pad, the riser, the atmosphere) */
+      if (!longEvent) {
+        for (let bt = 0; bt < 4; bt++) {
+          const beatAbs = bar * 4 + bt;
+          if (kickOn && !(fillBar && bt === 3) && !(toDrop && k === L - 1 && bt === 3)) {
+            play(S.kick(), beatAbs, 1, p.kick);
+            const st = when(beatAbs);
+            if (st >= 0 && st < T1 - 0.6) DUCKS.forEach(([d, c, lb]) => d.gain.setValueCurveAtTime(c, st, lb * BEATs));
+          }
+          if (backbeat && (bt === 1 || bt === 3) && !(toDrop && k === L - 1 && bt === 3)) play(S.clap(), beatAbs, 1, p.clap);
+          if (hatsOn && !(toDrop && k === L - 1 && bt === 3)) play(S.hat(+P.hat.toFixed(3)), beatAbs + 0.5, 0.85 + 0.15 * R(), p.hats);
+          if (P.ride && ((name === 'groove' && k >= L / 2) || (name === 'drop' && k >= 8))) play(S.ride(), beatAbs, bt % 2 ? 0.7 : 1, p.ride);
+        }
+        if (P.shaker && ((name === 'groove' && k >= 4) || name === 'drop')) {
+          const v = [0.45, 0.7, 0.55, 0.9];
+          for (let s = 0; s < 16; s++) play(S.shaker(), bar * 4 + s / 4 + (s % 2 ? 0.04 : 0), v[s % 4], p.shaker);
+        }
+        if ((name === 'groove' && k >= L / 2) || name === 'drop') P.perc.forEach(([st, d]) => play(S.perc(Math.round(mtof(tonic + sc[d % 7]))), bar * 4 + st / 4, 1, p.perc));
+        if (fillBar) [0.5, 0.6, 0.75, 0.9].forEach((v, i) => play(S.snare(200), bar * 4 + 3 + i / 4, v, p.snare));
+        /* the build's roll: the last eight bars, quarters, eighths, sixteenths, thirty-seconds */
+        if (toDrop && k >= L - 8) {
+          const r0 = L - 8, seg = Math.floor((k - r0) / 2), per = [1, 2, 4, 8][seg], n = (k === L - 1 ? 3.75 : 4) * per;
+          for (let i = 0; i < n; i++) { const tb = bar * 4 + i / per, u = ((bar - sec.start - r0) * 4 + i / per) / 31; play(S.snare(Math.round(180 + 170 * u)), tb, 0.3 + 0.7 * Math.pow(u, 1.5), p.snare); }
+        }
+        /* the bass */
+        const ROLL = { roll: [[1, 0, 0.85], [2, 0, 1], [3, 12, 0.7]], gallop: [[1, 0, 0.8], [3, 0, 1], [2, 12, 0.6]], offroll: [[2, 0, 1], [3, 12, 0.75]] }[P.bassLine] || [[1, 0, 0.85], [2, 0, 1], [3, 12, 0.7]];
+        const bassRoll = name === 'groove' || name === 'drop' || (name === 'outro' && k < L / 2);
+        if (bassRoll) for (let bt = 0; bt < 4; bt++) ROLL.forEach(([s, add, v]) => { const st = play(S.bass(ch.root + add, 0.225), bar * 4 + bt + s / 4, v, p.bass); if (st != null && st >= 0) { const f = bassCut ? bassCut(bar + (bt + s / 4) / 4) : 700; bassSnap.setValueAtTime(f * 2, st); bassSnap.setTargetAtTime(0, st, 0.04); } });
+        if (name === 'build' && !(mv.concept === 'strip' && k >= L - 8) && k < L - (toDrop ? 0 : 0)) for (let bt = 0; bt < 4; bt++) if (!(toDrop && k === L - 1 && bt === 3)) play(S.bass(ch.root, 0.45), bar * 4 + bt + 0.5, 1, p.bass);
+        /* the arpeggio, from the fourth bar of the intro to the end */
+        if (!(name === 'intro' && k < Math.min(4, L / 4))) {
+          const tones = ch.arp;
+          P.arp.forEach((ix, s) => {
+            if (ix < 0) return;
+            const st = play(S.pluck(tones[ix]), bar * 4 + s / 4, 1, p.arp);
+            if (st != null && st >= 0) { const f = arpCut ? arpCut(bar + s / 16) : 1100; arpSnap.setValueAtTime(f * P.pluck.snap, st); arpSnap.setTargetAtTime(0, st, P.pluck.snapT); }
+          });
+        }
+        /* drops: the crash and the hit the build chose, crashes every eight bars */
+        if (name === 'drop' && k === 0) { const h = dropD.hit || 'crashImpact'; if (h !== 'cut' && h !== 'impact' && h !== 'boom') play(S.crash(3), bar * 4, 1, p.crash); if (h === 'crashImpact' || h === 'impact' || h === 'boom') play(S.impact(), bar * 4, h === 'boom' ? 0.8 : 1, p.impact); }
+        if (name === 'drop' && k > 0 && k % 8 === 0) play(S.crash(3), bar * 4, 0.7, p.crash);
+        if (name === 'groove' && (k === 0 || k === L / 2)) play(S.crash(3), bar * 4, k ? 0.75 : 0.6, p.crash);
+        if (name === 'breakdown' && k === 0) { play(S.impact(), bar * 4, 0.6, p.impact); play(S.sweep(2, 8000, 250, false, 14), bar * 4, 1, p.sweeps); }
+        if (name === 'groove' && nx && nx.name === 'breakdown' && k === L - 4) play(S.sweep(4, 500, 7000, true, 13), bar * 4, 0.7, p.sweeps);
+        /* reversed cymbals into the groove, its half, the breakdown, and (two bars) the drop */
+        if (k === L - 1 && nx && (nx.name === 'groove' || nx.name === 'breakdown')) play(S.revCrash(BARs), (bar + 1) * 4 - 4, 0.5, p.revcym);
+        if (name === 'groove' && k === L / 2 - 1) play(S.revCrash(BARs), (bar + 1) * 4 - 4, 0.6, p.revcym);
+        if (toDrop && k === L - 2) play(S.revCrash(2 * BARs), bar * 4, 1, p.revcym);
+      }
+      /* the pad: every chord, every section */
+      if (bar % 2 === 0) play(S.pad(ch.notes, 2), bar * 4, 1, p.pad);
+      /* atmosphere under the intro and every breakdown */
+      if ((name === 'intro' || name === 'breakdown') && k === 0) play(S.atmos(name === 'intro' ? L + 4 : L, name === 'intro' ? 30 : 31 + sec.n), bar * 4, 1, p.atmos);
+      /* the riser over the build's last sixteen bars */
+      if (toDrop && k === Math.max(0, L - 16)) play(S.riser(Math.min(16, L) - 0.25), bar * 4, 1, p.riser);
+      /* the hook */
+      if (k % 8 === 0) {
+        const blk = k / 8;
+        if (name === 'groove' && k === L - 8 && sec.n === 0) playHook(bar, 'hook', p.keys, 0.35);
+        if (name === 'breakdown') { playHook(bar, 'hook', p.keys, blk === 0 ? 1 : 0.3, blk === 0 ? 0 : 12); if (blk >= 1 || L <= 8) playHook(bar, 'hook', p.lead, 0.7); }
+        if (name === 'build' && blk % 2 === 0 && k < L - 8) { if (mv.concept === 'melodic' && blk === 0) playHook(bar, 'hook', p.lead, 0.8, 0, 6); else playHook(bar, 'hook', p.lead, 0.9); }
+        if (name === 'build' && blk % 2 === 1 && k < L - 8) playHook(bar, 'open', p.keys, 0.6);
+        if (name === 'drop') {
+          /* the drop's eight-bar blocks: the hook (lead and keys an octave up), again, then the lead resting
+             while the keys say it, then the hook with its open ending; a later drop starts developed */
+          const plan = sec.n === 0 ? ['hook', 'hook', 'keys', 'open', 'hook', 'open'] : ['open', 'hook', 'keys', 'hook', 'open', 'hook'];
+          const w = plan[blk % plan.length];
+          if (w === 'keys') playHook(bar, 'hook', p.keys, 0.6, 12);
+          else { playHook(bar, w, p.lead, 1); playHook(bar, w, p.keys, 0.3, 12); }
+        }
+      }
+    }
+    /* the gate on the pad in the build's last bars; the breath: everything but the tails, gone */
+    secs.forEach((s, i) => {
+      const nx = secs[i + 1]; if (s.name !== 'build' || !nx || nx.name !== 'drop') return;
+      const mv = tr.moves[s.n] || {}, gEnd = (s.start + s.len) * 4 - (mv.breathLen === 'half' ? 2 : mv.breathLen === 'eighth' ? 0.5 : 1);
+      const steps = [[(s.start + s.len - 8) * 4, (s.start + s.len - 2) * 4, 0.5], [(s.start + s.len - 2) * 4, gEnd, 0.25]];
+      steps.forEach(([b0, b1, st]) => {
+        for (let x = b0; x < b1 - 1e-6; x += st) {
+          const t = when(x), d = st * BEATs, r = 0.003;
+          if (t + d < 0 || t > T1) continue;
+          if (t >= 0) { gate.gain.setValueAtTime(0, t); gate.gain.linearRampToValueAtTime(1, t + r); gate.gain.setValueAtTime(1, t + 0.55 * d); gate.gain.linearRampToValueAtTime(0, t + 0.55 * d + r); }
+        }
+      });
+      const tg = when(gEnd), td = when((s.start + s.len) * 4);
+      if (td > 0 && tg < T1) {
+        if (tg > 0) { hush.gain.setValueAtTime(1, Math.max(0, tg - 0.004)); hush.gain.linearRampToValueAtTime(0, tg); }
+        else hush.gain.setValueAtTime(0, 0);
+        gate.gain.setValueAtTime(1, Math.max(0, td));
+        if (td < T1) { hush.gain.setValueAtTime(0, Math.max(0, td - 0.004)); hush.gain.linearRampToValueAtTime(1, td); }
+      }
+    });
+    /* the end of the record: a fade over its last three bars */
+    if (last) { const tf = when((tr.bars - 3) * 4); if (tf < T1) { out.gain.setValueAtTime(1, Math.max(0, tf)); out.gain.linearRampToValueAtTime(0.0001, Math.max(0.01, when(tr.bars * 4))); } }
+    return ctx.startRendering().then((buf) => {
+      const L = buf.getChannelData(0), R = buf.getChannelData(1);
+      lookahead(L, R, -1);
+      return { l: L.slice(skip, skip + want), r: R.slice(skip, skip + want) };
+    });
+  }
+
+  /* every part's level (each sound is made at a known level; these set the
+     balance, as a mix engineer's faders): measured part by part in a drop,
+     over several records, to a reference mix's balance (kick -13 dB rms,
+     bass -17, pad -21, lead -19, arp -24, clap -10 peak, hats -16 ...) */
+  const PROG_LEVELS = { kick: 0.408, clap: 0.208, hats: 0.103, shaker: 0.0569, ride: 0.0891, perc: 0.0757, snare: 0.105, bass: 0.472, pad: 0.891,
+    arp: 0.323, lead: 0.388, keys: 0.189, atmos: 0.0675, crash: 0.3, impact: 0.358, revcym: 0.28, sweeps: 0.147,
+    riser: 0.301 };
+  /* the curves: for each section, where each filter and level starts and
+     ends (and turns, in between), at bars; a section's start may jump from
+     where the last one ended */
+  function progCurves(tr, secs) {
+    const C = { padCut: [], arpCut: [], bassCut: [], leadCut: [], keysCut: [], kickCut: [], snareHP: [], musicHP: [], padGain: [], arpGain: [], leadGain: [] };
+    secs.forEach((sc) => {
+      const s = sc.start, L = sc.len, e = s + L - 0.001, nm = sc.name;
+      const put = (k, pts) => pts.forEach(([x, v]) => C[k].push([s + x, v]));
+      const D = { padCut: [[0, 2400], [L - 0.001, 2400]], arpCut: [[0, 3000], [L - 0.001, 3000]], bassCut: [[0, 800], [L - 0.001, 800]], leadCut: [[0, 3500], [L - 0.001, 3500]],
+        keysCut: [[0, 7000], [L - 0.001, 7000]], kickCut: [[0, 19000], [L - 0.001, 19000]], snareHP: [[0, 40], [L - 0.001, 40]], musicHP: [[0, 20], [L - 0.001, 20]],
+        padGain: [[0, 1], [L - 0.001, 1]], arpGain: [[0, 0.8], [L - 0.001, 0.8]], leadGain: [[0, 1], [L - 0.001, 1]] };
+      const X = {};
+      if (nm === 'intro') Object.assign(X, { padCut: [[0, 500], [L - 0.001, 1400]], arpCut: [[0, 350], [L - 0.001, 1100]], padGain: [[0, 0], [Math.min(6, L / 2), 1], [L - 0.001, 0.8]],
+        arpGain: [[0, 0], [Math.min(4, L / 4), 0], [Math.min(8, L / 2), 0.7], [L - 0.001, 0.8]], bassCut: [[0, 260], [L - 0.001, 260]] });
+      if (nm === 'groove') Object.assign(X, { padCut: [[0, 1400], [L - 0.001, 2200]], arpCut: [[0, 1100], [L / 2, 2600], [L - 0.001, 4200]], bassCut: [[0, 260], [L / 2, 700], [L - 0.001, 900]],
+        padGain: [[0, 0.8], [L - 0.001, 0.8]], keysCut: [[0, 1800], [L - 0.001, 1800]] });
+      if (nm === 'breakdown') Object.assign(X, { padCut: [[0, 1800], [L - 0.001, 6000]], arpCut: [[0, 1600], [L - 0.001, 3200]], padGain: [[0, 1.1], [L - 0.001, 1.1]], arpGain: [[0, 0.7], [L - 0.001, 0.7]],
+        leadCut: [[0, 1200], [L / 2, 1200], [L - 0.001, 3500]], leadGain: [[0, 0.5], [L - 0.001, 0.8]] });
+      if (nm === 'build') Object.assign(X, { padCut: [[0, 6000], [L - 0.001, 5000]], arpCut: [[0, 3200], [Math.max(1, L - 4), 10000], [L - 0.001, 10000]], bassCut: [[0, 400], [Math.max(1, L - 4), 1400], [L - 0.001, 1400]],
+        leadCut: [[0, 3500], [L / 2, 9000], [L - 0.001, 9000]], kickCut: [[0, 180], [Math.min(8, L / 4), 19000], [L - 0.001, 19000]], snareHP: [[0, 40], [Math.max(0, L - 4), 40], [L - 0.25, 900], [L - 0.001, 900]],
+        musicHP: [[0, 20], [Math.max(0, L - 8), 20], [L - 0.25, 450], [L - 0.001, 450]], arpGain: [[0, 0.7], [L - 0.001, 0.7]], leadGain: [[0, 0.8], [L - 0.001, 0.9]] });
+      if (nm === 'drop') Object.assign(X, { padCut: [[0, 5000], [L - 0.001, 5500]], arpCut: [[0, 4500], [L - 0.001, 5500]], bassCut: [[0, 800], [L - 0.001, 900]], leadCut: [[0, 9000], [L - 0.001, 9000]] });
+      if (nm === 'outro') Object.assign(X, { padCut: [[0, 5000], [L - 0.001, 800]], arpCut: [[0, 4500], [L - 0.001, 600]], bassCut: [[0, 900], [L - 0.001, 400]],
+        padGain: [[0, 1], [Math.max(0, L - 4), 0.8], [L - 0.001, 0]], arpGain: [[0, 0.8], [L - 0.001, 0.2]] });
+      Object.keys(C).forEach((k) => put(k, X[k] || D[k]));
+    });
+    Object.values(C).forEach((pts) => pts.sort((x, y) => x[0] - y[0]));
+    return C;
+  }
+
   function renderSegment(tr, a, b) {
+    if (tr.engine === 'prog') return renderProg(tr, a, b);
     const T = tone();
     if (!T) return Promise.reject(new Error('Tone.js not loaded'));
     const S = STYLES[tr.style], FX = S.fx, KIT = KITS[S.kit];
@@ -2521,7 +3186,7 @@ window.VinylPlayer.Generative = (() => {
     p.cancelScheduledValues(now); p.setValueAtTime(p.value, now); p.setTargetAtTime(v, now, tc);
   }
   const post = (m, transfer) => { if (node) node.port.postMessage(m, transfer || []); };
-  const stepOf = () => SR / ctx.sampleRate;
+  const stepOf = (tr) => ((tr && tr.sr) || SR) / ctx.sampleRate;
 
   /* ---- pressing: a record made a segment at a time, and streamed ----------
      A track is pressed in segments - two bars first (so the needle has
@@ -2580,7 +3245,7 @@ window.VinylPlayer.Generative = (() => {
       if (!inRanges(this.done, nb)) return 5;
       let e = nb;
       while (e < this.tr.bars && inRanges(this.done, e)) e++;
-      const ahead = (at(this.tr, e) - pos * this.total) / SR;
+      const ahead = (at(this.tr, e) - pos * this.total) / ((this.tr && this.tr.sr) || SR);
       return ahead < 30 ? 4 : 2.5;
     }
     return { b: 3, next: 2, shelf: 1 }[this.role] || 0;
@@ -2778,7 +3443,7 @@ window.VinylPlayer.Generative = (() => {
   let deckPress = null, nextPress = null;
   function onDeck(p, at, asNext) {
     p.role = asNext ? 'next' : 'deck';
-    post(asNext ? { type: 'next', id: p.id, total: p.total, step: stepOf() } : { type: 'track', id: p.id, total: p.total, step: stepOf(), at });
+    post(asNext ? { type: 'next', id: p.id, total: p.total, step: stepOf(p.tr) } : { type: 'track', id: p.id, total: p.total, step: stepOf(p.tr), at });
     p.feed((part) => post({ type: 'append', id: p.id, offset: part.offset, l: part.l, r: part.r }, [part.l.buffer, part.r.buffer]));
     later(work);
   }
