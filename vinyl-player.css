@@ -213,6 +213,13 @@ vinyl-player.is-on .vp-key[aria-checked="true"] i{background:var(--vp-lamp);box-
 /* like: its lamp lights for the record that was liked, until the next one */
 .vp-key--like{font-variant-emoji:text;}
 .vp-key--like[aria-pressed="true"] i{background:var(--vp-lamp);box-shadow:0 0 6px var(--vp-lamp-glow),0 0 12px rgba(255,59,68,.55);}
+.vp-key--like[aria-pressed="true"]{color:#ff5a63;text-shadow:0 0 8px rgba(255,59,68,.6);}
+/* the moment of the like: a ring of the lamp's light opens off the key and fades */
+.vp-key--like::after{content:"";position:absolute;inset:-2px;border-radius:5px;pointer-events:none;opacity:0;
+  box-shadow:0 0 0 2px var(--vp-lamp),0 0 14px var(--vp-lamp-glow);}
+.vp-key--like.is-love::after{animation:vp-love 520ms cubic-bezier(0.23,1,0.32,1);}
+@keyframes vp-love{0%{opacity:.9;transform:scale(1);}100%{opacity:0;transform:scale(1.6);}}
+@media (prefers-reduced-motion:reduce){ .vp-key--like.is-love::after{animation-duration:1ms;} }
 
 /* the fader: a slot cut in the plate, a printed scale beside it, and a
    ridged cap that rides in it */
@@ -269,10 +276,10 @@ vinyl-player.is-wide .vp-controls{display:contents;}
 vinyl-player.is-wide .vp-controls > .vp-ctl{position:absolute;}
 vinyl-player.is-wide .vp-ctl--start{left:calc(var(--vp-d) * .035);bottom:calc(var(--vp-d) * .03);}
 vinyl-player.is-wide .vp-ctl--speed{left:calc(var(--vp-d) * .035 + 82px);bottom:calc(var(--vp-d) * .025);}
-vinyl-player.is-wide .vp-ctl--like{left:calc(var(--vp-d) * .035 + 194px);bottom:calc(var(--vp-d) * .025);}
+vinyl-player.is-wide .vp-ctl--like{right:calc(var(--vp-d) * .1 + 62px);bottom:calc(var(--vp-d) * .06);}      /* beside the fader's foot */
 vinyl-player.is-wide .vp-ctl--volume{right:calc(var(--vp-d) * .1);bottom:calc(var(--vp-d) * .06);}
 vinyl-player.is-wide .vp-ctl--start .vp-print,vinyl-player.is-wide .vp-ctl--speed .vp-print,vinyl-player.is-wide .vp-ctl--like .vp-print{display:none;}
-vinyl-player.is-wide .vp-key--like{width:42px;height:30px;font-size:.62rem;gap:3px;}
+vinyl-player.is-wide .vp-key--like{width:56px;height:44px;font-size:1.05rem;gap:4px;}
 /* START·STOP and the speeds say what they are on the keys, as on the deck */
 vinyl-player.is-wide .vp-key--start{width:68px;height:44px;}
 vinyl-player.is-wide .vp-key--start::after{content:"start \00b7  stop";font-family:var(--vp-mono);font-size:.42rem;letter-spacing:.16em;text-transform:uppercase;color:#9a938a;}

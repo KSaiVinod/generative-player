@@ -721,7 +721,7 @@
       this.querySelectorAll('.vp-key').forEach(tapBack);
       if (p.like) p.like.addEventListener('click', () => {
         if (p.like.getAttribute('aria-pressed') === 'true' || !this._source || !this._source.like) { this.feel(false); return; }
-        if (this._source.like()) { p.like.setAttribute('aria-pressed', 'true'); this.feel(true); this._emit('vp-like'); }
+        if (this._source.like()) { p.like.setAttribute('aria-pressed', 'true'); this.feel(true); p.like.classList.remove('is-love'); void p.like.offsetWidth; p.like.classList.add('is-love'); this._emit('vp-like'); }
       });
       const keys = Array.from(this.querySelectorAll('.vp-key[data-rpm]'));
       keys.forEach((k) => {
