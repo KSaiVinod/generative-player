@@ -194,7 +194,7 @@ The element sizes itself from its own width, so to make it bigger or smaller, gi
 
 - **Rotation:** with the `portrait` attribute, a phone turned on its side gets a full-screen card asking for it upright. A web page cannot lock the rotation itself, except on Android in fullscreen or as an installed app. The card is `.vp-turn` in the stylesheet.
 - **Background play:** on a touch screen, the sources send their sound through a hidden `<audio>` element as well as straight out. The sound goes out directly while the page is in view, so scratching has no added delay. When the page is hidden or the screen locks, the element carries it, which phones treat as media playback. On iOS 17 and later the page also asks for playback audio, so the silent switch does not mute it. Your own source can do the same: `const bg = VinylPlayer.background(ctx, [outputs])`, then call `bg.play()` and `bg.pause()` with the record.
-- **Lock screen:** the lock screen and the notification shade show the track and offer play and pause. Set the artist, album and artwork with `media-artist`, `media-album` and `media-art`; the artwork defaults to the page's apple-touch-icon.
+- **Lock screen:** the lock screen and the notification shade show the track and offer play and pause. Set the title, artist, album and artwork with `media-title` (otherwise the track's own name), `media-artist`, `media-album` and `media-art`; the artwork defaults to the page's apple-touch-icon.
 - **Haptics:** the switches tap back, using `navigator.vibrate` on Android and a hidden switch toggle on iOS 18 and later.
 
 ## Credits

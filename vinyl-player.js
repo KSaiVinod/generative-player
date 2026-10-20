@@ -26,8 +26,8 @@
    storage (a localStorage prefix: the speed and the volume remembered),
    analog ("off" to go without the analog layer even when it is loaded),
    portrait (a phone on its side is asked to turn back upright),
-   media-artist / media-album / media-art (the lock screen's lines and
-   picture; the title is the track's). On a phone the record plays on with
+   media-title / media-artist / media-album / media-art (the lock screen's
+   lines and picture; without media-title, the title is the track's). On a phone the record plays on with
    the screen locked or the page in the background.
    Children with slot="label" are put on the record's label.
 
@@ -113,7 +113,7 @@
     const icon = document.querySelector('link[rel="apple-touch-icon"]');
     const art = el.getAttribute('media-art') || (icon && icon.href);
     const named = tr && (tr.title || (tr.label && tr.label.charAt(0).toUpperCase() + tr.label.slice(1) + (tr.side === 'b' ? ' \u00b7 Side B' : '')));
-    const title = named || el.getAttribute('label-title') || document.title;
+    const title = el.getAttribute('media-title') || named || el.getAttribute('label-title') || document.title;
     try {
       MS.metadata = new MediaMetadata({ title, artist: el.getAttribute('media-artist') || el.getAttribute('label-top') || '',
         album: el.getAttribute('media-album') || '', artwork: art ? [{ src: art, sizes: '180x180', type: 'image/png' }] : [] });
