@@ -48,14 +48,14 @@ vinyl-player > [slot="label"]{display:none;}
   grid-template-columns:var(--vp-d) calc(var(--vp-d) * .14);
   grid-template-areas:"deck side" "keys keys";
   row-gap:clamp(14px,3vw,20px);
-  padding:calc(var(--vp-d) * .07) calc(var(--vp-d) * .05) 16px;border-radius:18px;border:1px solid #2e2b31;
+  padding:calc(var(--vp-d) * .07) calc(var(--vp-d) * .05) 30px;border-radius:18px;border:1px solid #2e2b31;
   background:
     repeating-linear-gradient(90deg,rgba(255,255,255,.013) 0 1px,transparent 1px 3px),
     linear-gradient(160deg,#252228,#18161b 45%,#0f0e11);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.08),inset 0 -2px 0 rgba(0,0,0,.6),
     0 2px 0 #08070a,0 34px 70px rgba(0,0,0,.6);}
-/* the maker's line, engraved in the corner (the model attribute) */
-.vp-model{position:absolute;z-index:3;top:12px;left:16px;margin:0;
+/* the maker's line (the model attribute), engraved along the plinth's foot, under the keys, clear of the platter */
+.vp-model{position:absolute;z-index:3;bottom:9px;left:0;right:0;text-align:center;margin:0;
   font-family:var(--vp-mono);font-size:.48rem;letter-spacing:.24em;text-transform:uppercase;
   color:#5a535d;pointer-events:none;white-space:nowrap;}
 .vp-deck{grid-area:deck;width:var(--vp-d);position:relative;}
@@ -303,7 +303,7 @@ vinyl-player.is-wide .vp-plinth::before{content:"";position:absolute;left:calc(v
     repeating-conic-gradient(#2a272d 0 8deg,#141216 8deg 60deg),
     #141216;
   box-shadow:inset 0 0 0 1px #34313a,0 3px 6px rgba(0,0,0,.5);}
-vinyl-player.is-wide .vp-model{top:auto;left:auto;right:calc(var(--vp-d) * .1);bottom:calc(var(--vp-d) * .015);}
+vinyl-player.is-wide .vp-model{top:auto;left:auto;right:calc(var(--vp-d) * .1);bottom:calc(var(--vp-d) * .015);text-align:right;}
 
 /* Windows renders small type thinner: a step up */
 vinyl-player.is-win .vp-label-top,vinyl-player.is-win .vp-label-sub{font-size:.5rem;}
