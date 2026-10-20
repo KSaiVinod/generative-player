@@ -80,7 +80,7 @@ The engine's extras:
 - `warm(key)`: presses the first half of a record ahead of time.
 - `prefetch(key)`: fetches that style's instruments into the browser cache.
 - `like()`: the LIKE key calls this, so later records lean towards the liked one.
-- `flip()` and `prepareB()`: the hidden B-side.
+- `flip()` and `prepareB()`: the hidden B-side. It is one fixed record, the same for everyone: deep, melodic progressive in the style of Guy J, made by the progressive renderer. It runs 7.8 minutes at 123 BPM, with one long piano breakdown, a rolling bass, a soft pluck lead and an arpeggio through a dotted-eighth echo.
 - `onsamples` and `onpressing`: progress hooks for a loader.
 
 ## Attributes
