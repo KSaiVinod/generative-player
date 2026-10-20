@@ -23,7 +23,7 @@ It has no dependencies and needs no build step. It is plain scripts and one styl
 | `stylus.js` | The AudioWorklet that plays a record at any speed, either way. The sources load it themselves. | yes |
 | `file-source.js` | `VinylPlayer.FileSource`: any audio file | to play files |
 | `analog.js` | `VinylPlayer.Analog`: surface noise, the needle drop and the scratch sound, over whatever plays | optional |
-| `engine/` | `VinylPlayer.Generative`: a new track made in the browser every time, plus Tone.js, sampled instruments and a melody model (about 20 MB) | optional |
+| `engine/` | `VinylPlayer.Generative`: a new track made in the browser every time, plus a few recorded instruments (VCSL); a record fetches only the ones it plays, about 1 MB | optional |
 | `demo/` | A page with all three. Serve the folder and open `demo/`. | no |
 
 Every script finds its own files next to itself, so the folder can be served from any path. To use it in another app, copy the folder into that app. Loading the files from another site needs that site to send CORS headers for all of them: the worklet, the instruments and the melody model.
@@ -54,9 +54,6 @@ A file from another origin needs CORS headers.
 ## A deck that makes its own music
 
 ```html
-<script src="/vinyl-player/engine/no-blob-workers.js"></script>   <!-- only under a CSP without blob: workers -->
-<script src="/vinyl-player/engine/vendor/tone/Tone.js"></script>
-<script src="/vinyl-player/engine/vendor/tonejs-instruments/manifest.js"></script>
 <script src="/vinyl-player/engine/vendor/vcsl/manifest.js"></script>
 <script src="/vinyl-player/engine/generative.js" data-likes-key="my-app.likes"></script>
 <script src="/vinyl-player/vinyl-player.js"></script>
@@ -65,20 +62,18 @@ A file from another origin needs CORS headers.
 <script type="module">
   const deck = document.getElementById('deck');
   deck.source = VinylPlayer.Generative;
-  VinylPlayer.Generative.style('deep');              // optional: one of .styles, or '' for the rotation
   await VinylPlayer.Generative.prepare();            // arms it and presses the first record
 </script>
 ```
 
 The engine's extras:
 
-- `styles`: a list of `[key, label]` pairs.
-- `style(key)`: makes every record pressed from now on in that style (`''` goes back to the shuffle). It does not replace the record already playing; a waiting record of another style is discarded. The soon page always shuffles, so it sets `''` when START is pressed.
+- `styles`: a list of `[key, label]` pairs. Progressive house is the only style now (`prog`).
+- `style(key)`: `'prog'`, or `''` for the rotation (which is progressive house too).
 - `edit(mode)`: progressive house is full length by default (6–8.5 minutes, about 192–256 bars, at either speed). `edit('short')` gives the old short edit for records pressed from then on; `edit('full')` goes back.
 - `diagnostics()`: what failed to load: a missing manifest entry, a failed download or a file that would not decode, as `{ kind, name, detail, at }`. Each failure is also reported once in the console.
-- `track.resolved`: for the record playing, each part's chosen instrument, what actually played, and where it came from (`tonejs-instruments`, `vcsl` or `synth`), with the reason when a fallback stood in.
+- `track.resolved`: for the record playing, each part's chosen instrument, what actually played, and where it came from (`vcsl` or `synth`), with the reason when a fallback stood in.
 - `warm(key)`: presses the first half of a record ahead of time.
-- `prefetch(key)`: fetches that style's instruments into the browser cache.
 - `like()`: the LIKE key calls this, so later records lean towards the liked one.
 - `replay(seed, side)` puts a record back on by its seed, and `skip()` puts the next one on now.
 - Every progressive record ends in its run-out groove: about five seconds after the music (three bars at 123 BPM) of the locked groove's click and pop, once a turn of the platter, before the next record drops (`track.runout`).
@@ -174,26 +169,22 @@ The element sizes itself from its own width, so to make it bigger or smaller, gi
 ## Content Security Policy
 
 - **`stylus.js` is an AudioWorklet module.** It is loaded from the same place as the other files, so `script-src 'self'` covers it when the files are on your own origin.
-- **The generative engine renders with Tone.js.** Tone loads its own worklet processors as `blob:` scripts and fetches them first, so the page needs `blob:` in both `script-src` and `connect-src`.
-- **`engine/no-blob-workers.js` quiets Tone's clock Worker.** Tone tries to start it from a `blob:` URL; this file refuses that before Tone loads, so a strict policy logs no error and Tone falls back to its timer clock.
-- **The melody model is TensorFlow.js.** It is loaded only once the first record is playing.
+- **The generative engine needs nothing more.** It renders on the page's own audio context and loads no other scripts, so a strict policy (`script-src 'self'`, no `blob:`) is enough.
 
 ## How the engine composes
 
-- **Each style has a profile.** It sets the lead voices and the motif's length (two or four bars). It also sets the rhythms, density, contour, range, note lengths, counter-melody shape, keyboard comp, bass lines and chord voicing. So Chicago riffs short over a jacking bass, and deep house plays long, sparse keys in open voicings. Trance holds long notes, minimal plays blips, tech house leads with a written bass hook, and acid's 303 slides and accents.
-- **Each record has one theme.** The motif returns, and a drop tells it in phrases that develop: its question, an altered ending, the motif a step late, another register, then the close. A later drop starts from the developed versions. Arpeggios, counter-melodies and comps are phrase-length patterns with variations.
-- **Each build has one concept, weighted by style:** bass, melodic, percussive, chord-driven or stripped. It runs through five stages; for 32 bars these are tease, develop, urgency, focus and set-up.
+- **Each build has one concept:** bass, melodic, percussive, chord-driven or stripped. It runs through five stages; for 32 bars these are tease, develop, urgency, focus and set-up.
   - There is one main transition effect and at most one supporting effect, and often none.
   - The breath before the drop is either true silence (the reverb and echo returns are cut too) or keeps one effect's tail.
   - The drop opens with a crash, a boom, an impact, a crash with an impact, or a clean cut, then pays off the concept.
 - **Progressive house uses the genre's own sounds.**
-  - **Synthesised:** supersaw pads, a synth pluck whose filter snaps on each note, a sub-and-saw (or reese, or square) bass, a supersaw, saw or pluck lead, a drum machine's kick, clap and hats, and noise risers and sweeps.
-  - **Recorded:** used only where progressive uses them: a piano for the keys (sometimes the hook or the arpeggio), real strings under the pad in breakdowns, a shaker, a ride and a crash, and sometimes real claps or congas.
+  - **Synthesised:** supersaw pads, a synth pluck whose filter snaps on each note, a sub-and-saw (or reese, or square) bass, a supersaw, saw or pluck lead, a drum machine's kick, clap and hats, and noise risers and sweeps, and a string section (four bowed players a note, each with its own vibrato, through a body resonance) under the pad in breakdowns.
+  - **Recorded:** used only where progressive uses them: a piano for the keys (sometimes the hook or the arpeggio), a shaker, a ride and a crash, and sometimes real claps or congas.
   - **Production:** it has its own renderer at 44.1 kHz, with smooth filter curves, each part ducking under the kick by its own amount, a hall, a room and an echo, a soft clip on the loudest peaks, and a look-ahead limiter that watches the true peak (between samples), at −1 dBTP. The synth arpeggio and lead are set by their loudness rather than their peak, so a dense supersaw sits where a piano would. The pad carries a faint noise breath, 20 dB under its chord.
   - **Variety:** each record draws its own sound for every part: voices, detune, waves, filter bite, kick tone, which lead and which keys.
   - **Structure:** each record writes its own plan. It picks one of five song forms (classic, early drop, one long breakdown, bridge, groove-led), and each section is arranged its own way, with parts entering and leaving in their own order. Patterns run two bars or longer: arpeggio variations, eight bass lines with turnarounds, hat, clap and percussion patterns, and a fill library. The harmony uses 2, 4 or 8 chords at 1, 2 or 4 bars each, with re-harmonised breakdowns. The hook has its own plan and shape, and a guide-tone counter-melody joins in later drops. Across 300 records, no two shared a section plan.
   - **Eight-bar moves:** every eight-bar block of a drop or a long groove takes its own shape, never the same twice running: everything; the top end out but for the offbeat hat; the bass out under the kick; the pad out; stripped to drums and bass; or, once in a record, the kick out for four bars. The first drop keeps its first sixteen bars whole. Builds often lose the kick and bass for the last eight bars, leaving the roll alone. One section gain, applied after the limiter (which would otherwise level it), puts the intro, grooves, builds and outro 1–3 dB under the drops and the breakdowns 2.5–3.5 dB under, so the drops are the loudest part of the record. Measured over eight records against the ten references, nothing falls outside their range: loudness −10.0 to −10.7 LUFS, loudness range 3.7–4.4, change from one block to the next 4.0–6.3 dB (references 3.1–11.7, median 5.5), pump 7.0–10.3 dB, true peak −1.0 dBTP, and every drop's octave balance.
-- **The next record is chosen against the last four.** It avoids the same lead family, motif rhythm, contour, progression, build concepts and style. The key is not penalised.
+- **The next record is chosen against the last four.** It avoids the same lead family, motif rhythm, contour, progression and build concepts. The key is not penalised.
 
 ## Phones
 
@@ -204,18 +195,5 @@ The element sizes itself from its own width, so to make it bigger or smaller, gi
 
 ## Credits
 
-The engine plays sampled instruments from [tonejs-instruments](https://github.com/nbrosowsky/tonejs-instruments) by Nicholaus P. Brosowsky, under [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/). That licence asks for a credit wherever the engine is used. The recordings come from:
+The recorded instruments (a grand and an upright piano, an acoustic kit's ride and crash, a shaker, claps and congas) come from the [Versilian Community Sample Library](https://github.com/sgossner/VCSL) (Versilian Studios, CC0: no credit required, given anyway). `scripts/pack-vcsl.js` packs them into `engine/vendor/vcsl/`; without its manifest the engine plays synth voices in their place. Everything else is synthesised.
 
-- the VSCO 2 Community Edition;
-- Karoryfer Samples;
-- the University of Iowa Electronic Music Studios;
-- Freesound contributors flcellogrl, quartertone and donyaquick.
-
-More keyboards, mallets, bells, plucked strings, reeds, whistles, hand percussion and an acoustic drum kit come from the [Versilian Community Sample Library](https://github.com/sgossner/VCSL) (Versilian Studios, CC0: no credit required, given anyway). `scripts/pack-vcsl.js` packs them into `engine/vendor/vcsl/`; the manifest is optional, and without it the engine plays its synth voices in their place.
-
-Other parts:
-
-- [Tone.js](https://tonejs.github.io): MIT.
-- [MusicVAE](https://magenta.tensorflow.org/music-vae) (Magenta, Google), run with TensorFlow.js: Apache 2.0.
-
-The licence texts are in `engine/vendor/`.
