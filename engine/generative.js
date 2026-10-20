@@ -48,6 +48,11 @@ window.VinylPlayer.Generative = (() => {
   const HERE = (ME && ME.src) || location.href;
   const near = (p) => new URL(p, HERE).href;       // a file beside this one
   const LIKES = (ME && ME.dataset.likesKey) || 'vinyl-player.likes';
+  /* a phone or a tablet presses lean: a mobile browser reloads a tab that grows past a few hundred megabytes (iPhone
+     Safari most of all), so there one part is rendered at a time, no spare record waits on the shelf, a waiting record
+     is pressed less far ahead, one record's sounds are kept, and its long noise beds and risers at a part of the rate.
+     The music is the same; a desktop presses as it always has. */
+  const LEAN = (() => { try { return matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) <= 1100; } catch (e) { return false; } })();
   const SR = 32000;                               // plenty for this, and a third lighter than 48k
 
   /* ---- the styles -------------------------------------------------------- */
@@ -1033,6 +1038,13 @@ window.VinylPlayer.Generative = (() => {
   const rmsOf = (x, n) => { let s = 0; n = Math.min(n || x.length, x.length); for (let i = 0; i < n; i++) s += x[i] * x[i]; return Math.sqrt(s / Math.max(1, n)) || 1e-9; };
   const scale = (x, k) => { for (let i = 0; i < x.length; i++) x[i] *= k; return x; };
   const toBuf = (chs) => { const b = new AudioBuffer({ length: chs[0].length, numberOfChannels: chs.length, sampleRate: PSR }); chs.forEach((c, i) => b.copyToChannel(c, i)); return b; };
+  /* a sound with nothing high in it, kept at a fraction of the rate (each f samples averaged into one): a riser or
+     a noise bed is long, and a buffer the context plays is resampled as it goes, so it sounds the same at a part of the memory */
+  const toBufLow = (chs, f) => {
+    const n = Math.floor(chs[0].length / f), b = new AudioBuffer({ length: n, numberOfChannels: chs.length, sampleRate: PSR / f });
+    chs.forEach((c, ch) => { const o = new Float32Array(n); for (let i = 0; i < n; i++) { let s = 0; for (let j = 0; j < f; j++) s += c[i * f + j]; o[i] = s / f; } b.copyToChannel(o, ch); });
+    return b;
+  };
   const mixIn = (a, b, g) => { for (let i = 0; i < a.length && i < b.length; i++) a[i] += b[i] * (g == null ? 1 : g); return a; };
   const times = (x, e) => { for (let i = 0; i < x.length; i++) x[i] *= e[i]; return x; };
   /* an envelope: attack a, held to hold (s), then a release r */
@@ -1152,14 +1164,14 @@ window.VinylPlayer.Generative = (() => {
     return [...new Set(['kit-acoustic', 'perc-shaker'].concat(C.keys !== 'rhodes' || C.arp === 'piano' || C.lead === 'piano' ? [piano] : [],
 C.clap === 'recorded' ? ['perc-claps'] : [], C.hand === 'conga' ? ['perc-conga'] : []))];
   };
-  const progCache = new Map();                       // a record's sounds and its recordings, kept with it (two records: on the deck and next)
+  const progCache = new Map();                       // a record's sounds and its recordings, kept with it (two records: on the deck and next; one on a phone)
   function progBankFor(tr) {
     if (progCache.has(tr.seed)) return progCache.get(tr.seed);
     const sets = progSets(tr.patch);
     const p = Promise.all(sets.map((n) => instrument(n).then((m) => [n, m], () => [n, null]))).then((pairs) => progBank(tr, Object.fromEntries(pairs)));
     progCache.set(tr.seed, p);
     p.catch(() => progCache.delete(tr.seed));
-    while (progCache.size > 2) progCache.delete(progCache.keys().next().value);
+    while (progCache.size > (LEAN ? 1 : 2)) progCache.delete(progCache.keys().next().value);      // (on a phone one record's sounds kept: another's are made again, the same, when it is pressed)
     return p;
   }
   function progBank(tr, SM) {
@@ -1273,11 +1285,13 @@ C.clap === 'recorded' ? ['perc-claps'] : [], C.hand === 'conga' ? ['perc-conga']
         const n = Math.round(bars * BARs * PSR), cut = (i) => 300 * Math.pow(30, Math.pow(i / n, 1.3));
         const tone = biquad(saw((i) => mtof(57 + tr.key) * Math.pow(2, 2 * Math.pow(i / n, 1.5)), n), 'lp', cut);
         const chs = [0, 1].map((c) => { const x = biquad(noiseOf(n, tr.seed ^ 12 ^ c * 91), 'bp', cut, 1.2); for (let i = 0; i < n; i++) { const u = i / n; x[i] = x[i] * u * u + 0.25 * tone[i] * u * u; } return x; });
-        return duo(chs[0], chs[1], 1);
+        if (!LEAN) return duo(chs[0], chs[1], 1);
+        const g = 1 / Math.max(peakOf(chs[0]), peakOf(chs[1]));
+        return toBufLow(chs.map((x) => scale(x, g)), 2);      // (its sweep tops out near 9 kHz: on a phone half the rate)
       }),
       atmos: (bars, seed) => once('at' + bars + seed, () => {
         const n = Math.round(bars * BARs * PSR), chs = [0, 1].map((c) => { const x = biquad(noiseOf(n, tr.seed ^ seed ^ c * 13), 'lp', (i) => 900 * Math.pow(2, Math.sin(2 * Math.PI * (i / n) * 2)), 1.5); for (let i = 0; i < n; i++) { const u = i / n; x[i] *= Math.min(1, u / 0.25) * Math.min(1, (1 - u) / 0.25); } return x; });
-        const k = 0.25 / Math.max(rmsOf(chs[0]), rmsOf(chs[1])); return toBuf(chs.map((x) => scale(x, k)));
+        const k = 0.25 / Math.max(rmsOf(chs[0]), rmsOf(chs[1])); return LEAN ? toBufLow(chs.map((x) => scale(x, k)), 4) : toBuf(chs.map((x) => scale(x, k)));      // (nothing over 1.8 kHz in it: on a phone a quarter of the rate)
       }),
       /* the pad: a chord of supersaws, held for its chord's length */
       pad: (notes, bars) => once('pad' + notes.join(',') + 'x' + bars, () => {
@@ -2125,7 +2139,7 @@ C.clap === 'recorded' ? ['perc-claps'] : [], C.hand === 'conga' ? ['perc-conga']
      is less than half a minute ahead of the needle, then the B-side once it
      is offered, then the next track, then the one waiting on the shelf. */
   let pressId = 0;
-  const HEAD_CAP = 48;                             // bars a waiting record is pressed ahead (about a minute and a half)
+  const HEAD_CAP = LEAN ? 24 : 48;                 // bars a waiting record is pressed ahead (about a minute and a half; on a phone, half that)
   const pressings = new Set();
   /* the renders running now (a render cannot be stopped mid-way); a second
      may start beside one only for a record already taken off, or when the
@@ -2237,7 +2251,7 @@ C.clap === 'recorded' ? ['perc-claps'] : [], C.hand === 'conga' ? ['perc-conga']
   };
   function work() {
     const busy = [...inflight].filter((j) => !j.p.dead);
-    if (busy.length >= 2) return;
+    if (busy.length >= (LEAN ? 1 : 2)) return;
     /* the needle on silence may jump the queue, beside a render already going */
     const rescue = deckPress && !deckPress.dead && deckPress.urgency() === 5 && !deckPress.has(deckPress.needleBar());
     if (busy.length && !rescue) return;
@@ -2363,7 +2377,7 @@ C.clap === 'recorded' ? ['perc-claps'] : [], C.hand === 'conga' ? ['perc-conga']
   function take(rpm) {
     const p = shelf[rpm] && !shelf[rpm].dead ? shelf[rpm] : new Pressing(pickTrack(rpm), 'shelf');
     shelf[rpm] = null;
-    setTimeout(() => { if (armed) press(rpm); }, 3000);
+    if (!LEAN) setTimeout(() => { if (armed) press(rpm); }, 3000);      // (a spare on the shelf; a phone presses the next only when it is wanted)
     return p;
   }
 

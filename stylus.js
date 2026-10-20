@@ -21,6 +21,9 @@
    the next record.
    ============================================================ */
 const FADE = 1024;
+/* a record is kept in chunks of 65536 samples (about a second and a half), each made when its first part arrives:
+   a record announced but pressed only so far ahead (the next one, waiting) costs only what is pressed of it */
+const CH = 65536, CB = 16, CM = CH - 1;
 
 class Vinyl extends AudioWorkletProcessor {
   static get parameterDescriptors() {
@@ -43,8 +46,8 @@ class Vinyl extends AudioWorkletProcessor {
       } else if (m.type === 'append') {
         const r = this.cur && this.cur.id === m.id ? this.cur : this.next && this.next.id === m.id ? this.next : null;
         if (!r) return;
-        r.l.set(m.l.subarray(0, Math.max(0, Math.min(m.l.length, r.total - m.offset))), m.offset);
-        r.r.set(m.r.subarray(0, Math.max(0, Math.min(m.r.length, r.total - m.offset))), m.offset);
+        const n = Math.max(0, Math.min(m.l.length, r.total - m.offset));
+        Vinyl.put(r.l, m.l, m.offset, n); Vinyl.put(r.r, m.r, m.offset, n);
         Vinyl.cover(r, m.offset, Math.min(r.total, m.offset + m.l.length));
       } else if (m.type === 'seek') {
         if (!this.cur) return;
@@ -58,8 +61,19 @@ class Vinyl extends AudioWorkletProcessor {
 
   static record(m) {
     /* have: the stretches pressed, [from, to) in samples, in order, merged */
-    return { id: m.id, total: m.total, step: m.step, have: [], at: 0, done: false, l: new Int16Array(m.total), r: new Int16Array(m.total) };
+    return { id: m.id, total: m.total, step: m.step, have: [], at: 0, done: false, l: [], r: [] };
   }
+
+  /* n samples of src into the chunks from sample `at` */
+  static put(chunks, src, at, n) {
+    let i = 0;
+    while (i < n) {
+      const k = at + i, c = k >> CB, o = k & CM, len = Math.min(n - i, CH - o);
+      (chunks[c] || (chunks[c] = new Int16Array(CH))).set(src.subarray(i, i + len), o);
+      i += len;
+    }
+  }
+  static get(chunks, k) { const c = chunks[k >> CB]; return c ? c[k & CM] : 0; }
 
   static cover(r, a, b) {
     const all = r.have.concat([[a, b]]).sort((x, y) => x[0] - y[0]), out = [];
@@ -87,7 +101,8 @@ class Vinyl extends AudioWorkletProcessor {
     const k = Math.floor(p), f = p - k;
     if (!Vinyl.pressed(d, k)) return [0, 0];
     const k1 = Vinyl.pressed(d, k + 1) ? k + 1 : k;
-    return [(d.l[k] + (d.l[k1] - d.l[k]) * f) / 32768, (d.r[k] + (d.r[k1] - d.r[k]) * f) / 32768];
+    const G = Vinyl.get, l0 = G(d.l, k), r0 = G(d.r, k);
+    return [(l0 + (G(d.l, k1) - l0) * f) / 32768, (r0 + (G(d.r, k1) - r0) * f) / 32768];
   }
 
   process(inputs, outputs, params) {
