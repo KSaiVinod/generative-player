@@ -80,6 +80,8 @@ The engine's extras:
 - `warm(key)`: presses the first half of a record ahead of time.
 - `prefetch(key)`: fetches that style's instruments into the browser cache.
 - `like()`: the LIKE key calls this, so later records lean towards the liked one.
+- `replay(seed, side)` puts a record back on by its seed, and `skip()` puts the next one on now.
+- Every progressive record ends in its run-out groove: eight bars after the music of the locked groove's click and pop, once a turn of the platter, before the next record drops (`track.runout`).
 - `flip()` and `prepareB()`: the hidden B-side. It is one fixed record, the same for everyone: deep, melodic progressive in the style of Guy J, made by the progressive renderer. It runs 7.8 minutes at 123 BPM, with one long piano breakdown, a rolling bass, a soft pluck lead and an arpeggio through a dotted-eighth echo.
 - `onsamples` and `onpressing`: progress hooks for a loader.
 
@@ -130,6 +132,9 @@ All events bubble.
 | `vp-hint` | what the deck would say | the text (`''` while it is playing) |
 | `vp-scratch` | a scratch turns direction at speed | `{ flips }`, counted from when the hand went down |
 | `vp-like` | the LIKE key took | — |
+| `vp-speed` | 33 or 45 pressed | `{ rpm, playing }` |
+| `vp-spin` | a hand turned the record a quarter turn or more and let go | `{ turns }`, below zero for backwards |
+| `vp-dial` | the dial beside the arm was pressed (it does nothing itself) | — |
 | `vp-error` | the source could not start (a missing file, CORS, a file that will not decode) | `{ error }` |
 
 ## Writing your own source

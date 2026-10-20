@@ -931,6 +931,11 @@ window.VinylPlayer.Generative = (() => {
       tr.plan = { H, HB: progHarmony(tr, tr.chords.re), chordBars: tr.chords.bars, reharm: q() < 0.6, arps: writeProgArps(tr.patch.arp, q),
         counter: writeProgCounter(q, H, tr.chords.bars), form: progForm ? progForm.id : 'short' };
       tr.scripts = writeProgScripts(q, tr, progForm ? progForm.vars : tr.arr.map(() => null), progForm ? progForm.main : -1);
+      /* the run-out groove: after the music, the needle rides the locked groove a while - a click and a pop once a
+         turn - before the next record drops (lifting the arm ends it sooner) */
+      tr.runout = 8;
+      tr.scripts.push({ name: 'runout', start: tr.bars, len: tr.runout, n: 0, v: 'runout', on: {}, hooks: [], fills: [] });
+      tr.arr.push(['runout', tr.runout]); tr.bars += tr.runout;
       /* (for the critic: the hook as the ear has it) */
       tr.mel = Object.assign({}, tr.mel, { rhythm: tr.progHook.plan + ':' + tr.progHook.hook.map((x) => x[1]).join(','), hook: tr.progHook.hook.map((x) => x[2]) });
       tr.leadVoice = 'prog:' + tr.patch.rec.lead;
@@ -2212,7 +2217,8 @@ window.VinylPlayer.Generative = (() => {
       }
     });
     /* the end of the record: a fade over its last three bars */
-    if (last) { const tf = when((tr.bars - 3) * 4); if (tf < T1) { out.gain.setValueAtTime(1, Math.max(0, tf)); out.gain.linearRampToValueAtTime(0.0001, Math.max(0.01, when(tr.bars * 4))); } }
+    const musicEnd = tr.bars - (tr.runout || 0);
+    if (b >= musicEnd - 3) { const tf = when((musicEnd - 3) * 4); if (tf < T1) { out.gain.setValueAtTime(1, Math.max(0, tf)); out.gain.linearRampToValueAtTime(0.0001, Math.max(0.01, when(musicEnd * 4))); } }
     return ctx.startRendering().then((buf) => {
       const L = buf.getChannelData(0), R = buf.getChannelData(1);
       /* a soft clip before the limiter (as mastered records are made loud): the loudest instants rounded off from
@@ -2229,6 +2235,20 @@ window.VinylPlayer.Generative = (() => {
         const g1 = sgAt((i + blk) / sr), n = Math.min(blk, L.length - i);
         for (let j = 0; j < n; j++) { const g = g0 + (g1 - g0) * j / blk; L[i + j] *= g; R[i + j] *= g; }
         g0 = g1;
+      }
+      /* the run-out groove: once a turn of the platter, the lock-groove's click and the pop of the dust in it, over the
+         surface's hush (fixed to the record's own time, so every segment agrees) */
+      if (tr.runout && b > musicEnd) {
+        const turn = 60 / (tr.rpm === 45 ? 45 : 100 / 3), T0 = musicEnd * BARs, sr2 = buf.sampleRate, nz = seeded(tr.seed ^ 0x51DE);
+        for (let i = 0; i < L.length; i++) {
+          const t = i / sr2 + t0 - T0; if (t < 0) continue;
+          const ph = t % turn, k = Math.floor(t / turn);
+          let v = 0;
+          if (ph < 0.02) v += Math.sin(2 * Math.PI * 1900 * ph) * Math.exp(-ph / 0.0025) * 0.22 + Math.sin(2 * Math.PI * 140 * ph) * Math.exp(-ph / 0.008) * 0.12;      // the click
+          const pp = ph - turn * 0.43; if (pp >= 0 && pp < 0.012) v += Math.sin(2 * Math.PI * 3400 * pp + k) * Math.exp(-pp / 0.0012) * 0.1;      // the pop
+          const hush = (nz() - 0.5) * 0.006 * Math.min(1, t / 0.5);
+          L[i] += v + hush; R[i] += v * 0.92 + hush;
+        }
       }
       return { l: L.slice(skip, skip + want), r: R.slice(skip, skip + want) };
     });
@@ -3900,7 +3920,11 @@ window.VinylPlayer.Generative = (() => {
 
   /* the record turned over: whatever is on comes to a stop under the
      hand, and the B-side goes on from its first groove */
-  async function flip() {
+  async function flip() { return putOn(() => { const p = pressB(); bPress = null; return p; }); }      // (this copy goes on the deck; another is pressed if wanted again)
+  /* a record by its seed, again (the page's crate of liked records), and the next record now (a shake) */
+  function replay(seed, side) { return putOn(() => new Pressing(compose(seed >>> 0, side === 'b' ? 'b' : 'a', belt), 'shelf')); }
+  function skip() { return putOn(() => take(belt)); }
+  async function putOn(pressing) {
     setup();
     if (bg) bg.play();
     if (ctx.state === 'suspended') { try { await ctx.resume(); } catch (e) { /* stays silent */ } }
@@ -3910,7 +3934,7 @@ window.VinylPlayer.Generative = (() => {
     try { await ready; } catch (e) { playing = false; return; }
     if (t !== token) return;
     clearDeck();
-    const p = pressB(); bPress = null;               // this copy goes on the deck; another is pressed if wanted again
+    const p = pressing();
     deckPress = p; cur = p.tr; pos = 0;
     changed();
     onDeck(p, 0);
@@ -4005,7 +4029,7 @@ window.VinylPlayer.Generative = (() => {
        record in this style pressed ahead, so START has nothing to wait for
        and the needle can be dropped anywhere in it (a new pick throws it away) */
     warm(name) { setStyle(name); press(belt); },
-    flip,
+    flip, replay, skip,
     prepareB: () => { pressB(); },
     /* what failed to load (development): [{ kind, name, detail, at }] */
     diagnostics: () => diag.slice(),

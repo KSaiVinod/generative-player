@@ -363,6 +363,7 @@
                 '<div class="vp-arm" role="slider" tabindex="0" aria-label="Tonearm position: drag or use arrow keys to seek"' +
                   ' aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-valuetext="Tonearm at rest">' + ARM_SVG(u) + '</div>' +
                 ARMBASE_SVG +
+                '<button type="button" class="vp-dial" aria-label="The dial by the arm"></button>' +
               '</div>' +
             '</div>' +
           '</div>' +
@@ -388,7 +389,7 @@
         plinth: $('.vp-plinth'), model: $('.vp-model'), deck: $('.vp-deck'), drop: $('.vp-drop'), zone: $('.vp-zone'),
         platter: $('.vp-platter'), record: $('.vp-record'), label: $('.vp-label'), art: $('.vp-label-art'), rpmtag: $('.vp-rpmtag'),
         arm: $('.vp-arm'), controls: $('.vp-controls'), start: $('.vp-key--start'), like: $('.vp-key--like'),
-        fader: $('.vp-fader input'), eq: $('.vp-eq-screen'), hint: $('.vp-hint')
+        fader: $('.vp-fader input'), eq: $('.vp-eq-screen'), hint: $('.vp-hint'), dial: $('.vp-dial')
       };
       this._parts.model.textContent = this.getAttribute('model') || 'vinyl-player · direct drive';
       art.forEach((el) => { el.removeAttribute('slot'); this._parts.art.appendChild(el); });
@@ -557,7 +558,7 @@
         k.setAttribute('aria-checked', String(on));
         k.tabIndex = on ? 0 : -1;
       });
-      if (!quiet) { this.feel(false); this._set('rpm', r); }
+      if (!quiet) { this.feel(false); this._set('rpm', r); this._emit('vp-speed', { rpm: r, playing: this._playing }); }
     }
     get volume() { return this._vol; }
     set volume(v) {
@@ -676,10 +677,10 @@
         hand.raf = requestAnimationFrame(handFrame);
       };
       drop.addEventListener('pointerdown', (ev) => {
-        if (ev.button > 0 || ev.target.closest('.vp-arm')) return;
+        if (ev.button > 0 || ev.target.closest('.vp-arm, .vp-dial')) return;
         const c = centre();
         this._hand = { id: ev.pointerId, t0: performance.now(), last: performance.now(), c,
-                       a: Math.atan2(ev.clientY - c.y, ev.clientX - c.x), turned: 0, acc: 0, dir: 0, flips: 0, raf: 0 };
+                       a: Math.atan2(ev.clientY - c.y, ev.clientX - c.x), turned: 0, net: 0, acc: 0, dir: 0, flips: 0, raf: 0 };
         try { drop.setPointerCapture(ev.pointerId); } catch (e) { /* none */ }
         if (this._playing && this._source) {
           this._holding = true;
@@ -699,7 +700,7 @@
         if (d < -Math.PI) d += 2 * Math.PI;
         hand.a = a;
         const deg = d * 180 / Math.PI;
-        hand.turned += Math.abs(deg);
+        hand.turned += Math.abs(deg); hand.net += deg;
         if (this._holding) { this._angle += deg; hand.acc += deg; }
       });
       const letGo = (ev) => {
@@ -711,9 +712,12 @@
         try { drop.releasePointerCapture(ev.pointerId); } catch (e) { /* none */ }
         if (this._holding) { this._holding = false; if (this._source) this._source.release(); this.classList.remove('is-held'); }
         if (tap && ev.type === 'pointerup') this.toggle();
+        else if (Math.abs(hand.net) >= 90) this._emit('vp-spin', { turns: hand.net / 360 });      // (how far the hand turned it, and which way: below zero, backwards)
         this._eqWake();
       };
       drop.addEventListener('pointerup', letGo);
+      /* the dial beside the arm: it does nothing on a real deck you would notice; here the page may */
+      if (p.dial) p.dial.addEventListener('click', () => { this.feel(false); this._emit('vp-dial'); });
       drop.addEventListener('pointercancel', letGo);
 
       /* START·STOP does what a tap on the record does */
