@@ -1699,7 +1699,8 @@ window.VinylPlayer.Generative = (() => {
         });
         if (!sc.on.clap) put('clap', L / 2, L, clapA);
         /* (from its third phrase on, the hats change pattern each eight bars) */
-        for (let bl = 2; bl < steps; bl++) if (sc.on.hats) put('hats', bl * 8, bl * 8 + 8, pick(['off', 'sixteen', 'offopen', 'shuffle']));
+        const hatsIn = (b) => (sc.on.hats || []).some(([f, t]) => b >= f && b < t);       // (only where the hats already play: their entry, and their leaving, stand)
+        for (let bl = 2; bl < steps; bl++) if (hatsIn(bl * 8) && hatsIn(bl * 8 + 7)) put('hats', bl * 8, bl * 8 + 8, pick(['off', 'sixteen', 'offopen', 'shuffle']));
         /* the hook teased quietly near the end, now and then */
         if (!bridge && n === 0 && L >= 16 && chance(0.7)) sc.hooks.push({ at: L - 8, which: 'hook', voice: 'keys', g: 0.35 });
         if (bridge) sc.hooks.push({ at: 0, which: 'alt', voice: 'keys', g: 0.45, tr: 12 });
@@ -2181,6 +2182,16 @@ window.VinylPlayer.Generative = (() => {
     return ctx.startRendering().then((buf) => {
       const L = buf.getChannelData(0), R = buf.getChannelData(1);
       lookahead(L, R, -1.5);
+      /* after the limiter (which would flatten them): the drops the loudest of the record - the intro, the grooves and the
+         builds a little under them, the builds climbing into the drop (dB at a section's start and end) */
+      const PG = { intro: [-3, -1.5], groove: [-1.5, -1.5], build: [-2.5, -1], outro: [-1.5, -4] }, sr = buf.sampleRate, blk = 256;
+      const pgAt = (t) => { const bar = (t + t0) / BARs, sc = secs.find((x) => bar >= x.start && bar < x.start + x.len), g = sc && PG[sc.name]; return g ? g[0] + (g[1] - g[0]) * (bar - sc.start) / sc.len : 0; };
+      let g0 = undb(pgAt(0));
+      for (let i = 0; i < L.length; i += blk) {
+        const g1 = undb(pgAt((i + blk) / sr)), n = Math.min(blk, L.length - i);
+        for (let j = 0; j < n; j++) { const g = g0 + (g1 - g0) * j / blk; L[i + j] *= g; R[i + j] *= g; }
+        g0 = g1;
+      }
       return { l: L.slice(skip, skip + want), r: R.slice(skip, skip + want) };
     });
   }
