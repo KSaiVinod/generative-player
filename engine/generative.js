@@ -933,7 +933,7 @@ window.VinylPlayer.Generative = (() => {
       tr.scripts = writeProgScripts(q, tr, progForm ? progForm.vars : tr.arr.map(() => null), progForm ? progForm.main : -1);
       /* the run-out groove: after the music, the needle rides the locked groove a while - a click and a pop once a
          turn - before the next record drops (lifting the arm ends it sooner) */
-      tr.runout = 8;
+      tr.runout = Math.max(2, Math.round(5 / (240 / tr.bpm)));      // (about five seconds: three bars at 123)
       tr.scripts.push({ name: 'runout', start: tr.bars, len: tr.runout, n: 0, v: 'runout', on: {}, hooks: [], fills: [] });
       tr.arr.push(['runout', tr.runout]); tr.bars += tr.runout;
       /* (for the critic: the hook as the ear has it) */

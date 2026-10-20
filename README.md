@@ -81,7 +81,7 @@ The engine's extras:
 - `prefetch(key)`: fetches that style's instruments into the browser cache.
 - `like()`: the LIKE key calls this, so later records lean towards the liked one.
 - `replay(seed, side)` puts a record back on by its seed, and `skip()` puts the next one on now.
-- Every progressive record ends in its run-out groove: eight bars after the music of the locked groove's click and pop, once a turn of the platter, before the next record drops (`track.runout`).
+- Every progressive record ends in its run-out groove: about five seconds after the music (three bars at 123 BPM) of the locked groove's click and pop, once a turn of the platter, before the next record drops (`track.runout`).
 - `flip()` and `prepareB()`: the hidden B-side. It is one fixed record, the same for everyone: deep, melodic progressive in the style of Guy J, made by the progressive renderer. It runs 7.8 minutes at 123 BPM, with one long piano breakdown, a rolling bass, a soft pluck lead and an arpeggio through a dotted-eighth echo.
 - `onsamples` and `onpressing`: progress hooks for a loader.
 
