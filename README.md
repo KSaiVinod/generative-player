@@ -3,7 +3,7 @@
 A turntable you can drop into any page, as a `<vinyl-player>` element.
 
 - **The record is the play button.** Tap it to start or stop.
-- **The arm is the seek control.** Drag it onto the record and the music plays from where the needle lands. Carry it off the record and the record stops.
+- **The arm is the seek control.** Drag it onto the record and the music plays from where the needle lands. Carry it off the record and the record turns on while the side waits where the needle left it; put the needle back down and it plays on from wherever it lands.
 - **A hand on a playing record brakes it.** Move your hand and the music follows it, forwards and backwards: a scratch.
 - **The switches:**
   - START·STOP.

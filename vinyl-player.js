@@ -31,7 +31,9 @@
    the screen locked or the page in the background.
    Children with slot="label" are put on the record's label.
 
-   Events (bubbling): vp-play, vp-stop, vp-end, vp-change (detail: the
+   Events (bubbling): vp-play, vp-stop, vp-park (the arm let go clear of a
+   playing record: it turns on, the side waits), vp-unpark (detail: { at },
+   the needle back down), vp-end, vp-change (detail: the
    source's track), vp-hint (detail: text), vp-scratch (detail: { flips },
    each time a scratch turns direction at speed), vp-like, vp-error
    (detail: { error }: the source could not start).
@@ -47,6 +49,7 @@
   const GEO = { top: 0.08, right: -0.04, w: 0.52, h: 0.62, ox: 0.90, oy: 0.10 };
   const HINT_IDLE = 'Drop the needle: drag the arm onto the record';
   const HINT_DRAG = 'Let go over the record to drop the needle';
+  const HINT_PARK = 'The needle is up: drop it back on the record to play on';
 
   /* a tap you feel, on a phone: vibrate where there is one; iPhone Safari
      has none, but gives a system tap when a switch is toggled, and a
@@ -243,7 +246,7 @@
     constructor() {
       super();
       this._source = null;
-      this._playing = false; this._busy = false;
+      this._playing = false; this._busy = false; this._parked = false;
       this._rpm = 33; this._vol = 7;
       this._angle = 0; this._spinRaf = 0; this._spinLast = 0; this._holding = false;
       this._follow = 0; this._lastPos = 0;
@@ -456,7 +459,7 @@
     /* while it plays, the arm tracks inward with the music; past the run-out
        (a source that goes round again) it glides back out with it */
     _track() {
-      if (!this._playing || this._dragging || !this._source) { this._follow = 0; return; }
+      if (!this._playing || this._parked || this._dragging || !this._source) { this._follow = 0; return; }
       const pos = this._source.position();
       this._parts.arm.classList.toggle('is-tracking', !(pos < this._lastPos - 0.05));
       this._lastPos = pos;
@@ -464,6 +467,45 @@
       this._follow = setTimeout(() => this._track(), 400);
     }
     _followIn(ms) { clearTimeout(this._follow); this._follow = setTimeout(() => this._track(), ms); }
+
+    /* the arm lifted clear of the record while it plays: the platter turns
+       on, but the side waits where the needle left it (it does not run on
+       underneath), until the needle is put back down */
+    _park() {
+      this._parked = true;
+      clearTimeout(this._follow); this._follow = 0;
+      const src = this._source;
+      if (src) { if (src.park) src.park(true); src.lift(true); }
+      const A = this._analog();
+      if (A && A.lift) { try { A.lift(true); } catch (e) { /* none */ } }
+      this._parts.arm.classList.remove('is-tracking');
+      this._armTo(0, true);
+      this.classList.add('is-parked');
+      this._parts.drop.setAttribute('aria-label', 'Drop the needle back');
+      this._hint(HINT_PARK);
+      if (MS) MS.playbackState = 'paused';
+      this._emit('vp-park');
+    }
+    /* the needle back down at `at` (a fraction of the side): it plays on from there */
+    _unpark(at) {
+      const src = this._source;
+      this._parked = false;
+      this.classList.remove('is-parked');
+      this._parts.drop.setAttribute('aria-label', 'Lift the needle');
+      if (!src) return;
+      this._armTo(at);
+      src.seek(at);
+      if (src.park) src.park(false);
+      src.lift(false);
+      haptic(14);
+      const A = this._analog();
+      if (A) { try { if (A.lift) A.lift(false); A.needleDrop(); } catch (e) { /* none */ } }
+      this._hint('');
+      this._lastPos = at;
+      this._followIn(300);
+      if (MS) MS.playbackState = 'playing';
+      this._emit('vp-unpark', { at });
+    }
 
     _setPlaying(on) {
       this._playing = on;
@@ -481,6 +523,7 @@
        place of the source's start (a B-side, a flip). */
     async play(from, how) {
       const src = this.source;
+      if (this._parked && this._playing && !how) { this._unpark(from != null ? from : src.position()); return; }
       if (!src || this._busy || (this._playing && !how)) return;
       this._busy = true;
       try {
@@ -524,6 +567,12 @@
       this._setPlaying(false);
       haptic(14);
       clearTimeout(this._follow); this._follow = 0;
+      if (this._parked) {
+        this._parked = false; this.classList.remove('is-parked');
+        if (this._source && this._source.park) this._source.park(false);
+        const A0 = this._analog();
+        if (A0 && A0.lift) { try { A0.lift(false); } catch (e) { /* none */ } }
+      }
       if (this._source) this._source.stop();
       const A = this._analog();
       if (A) { try { A.needleLift(); A.stop(); } catch (e) { /* none */ } }
@@ -533,7 +582,7 @@
       if (MS) MS.playbackState = 'paused';
       this._emit('vp-stop');
     }
-    toggle() { return this._playing ? this.stop() : this.play(); }
+    toggle() { return this._parked ? this.play() : this._playing ? this.stop() : this.play(); }
 
     /* ── the platter: it turns at whatever speed the record is read ───── */
     _spinFrame(now) {
@@ -575,7 +624,8 @@
       /* dragging the arm: picked up, the needle leaves the groove and the
          music goes quiet under it (a scratch as it moves); let go over the
          record and it drops there and plays on from that place; let go off
-         the record and the arm goes back to its rest and the record stops */
+         the record and the arm goes back to its rest, the record turning on
+         with the side waiting under it (parked), until the needle is put back */
       arm.addEventListener('pointerdown', (ev) => {
         ev.preventDefault(); ev.stopPropagation();
         this._dragging = true; this._moved = false;
@@ -612,7 +662,13 @@
         try { arm.releasePointerCapture(ev.pointerId); } catch (e) { /* none */ }
         const src = this._source;
         const at = this._moved ? this._dragPct : (this._playing && src ? src.position() : 0);
-        if (at == null) { if (this._playing) this.stop(); else { this._armTo(0, true); this._hint(HINT_IDLE); } return; }
+        if (at == null) {
+          /* let go clear of the record: playing, the side waits under the lifted arm */
+          if (this._playing && src) { if (!this._parked) this._park(); else { this._armTo(0, true); this._hint(HINT_PARK); } }
+          else { this._armTo(0, true); this._hint(HINT_IDLE); }
+          return;
+        }
+        if (this._parked && src) { this._unpark(at); return; }
         if (this._playing && src) {
           /* dropped somewhere new: the music picks up there */
           this._armTo(at);
@@ -644,6 +700,7 @@
         ev.preventDefault(); ev.stopPropagation();
         to = Math.min(0.98, Math.max(0, to));
         if (!this._playing) { this.play(to); return; }
+        if (this._parked) { this._unpark(to); return; }
         this._armTo(to); src.seek(to); this._lastPos = to;
       });
 

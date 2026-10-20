@@ -2013,17 +2013,16 @@ C.clap === 'recorded' ? ['perc-claps'] : [], C.hand === 'conga' ? ['perc-conga']
         g0 = g1;
       }
       /* the run-out groove: once a turn of the platter, the lock-groove's click and the pop of the dust in it, over the
-         surface's hush (fixed to the record's own time, so every segment agrees) */
+         silence between (fixed to the record's own time, so every segment agrees) */
       if (tr.runout && b > musicEnd) {
-        const turn = 60 / (tr.rpm === 45 ? 45 : 100 / 3), T0 = musicEnd * BARs, sr2 = buf.sampleRate, nz = seeded(tr.seed ^ 0x51DE);
+        const turn = 60 / (tr.rpm === 45 ? 45 : 100 / 3), T0 = musicEnd * BARs, sr2 = buf.sampleRate;
         for (let i = 0; i < L.length; i++) {
           const t = i / sr2 + t0 - T0; if (t < 0) continue;
           const ph = t % turn, k = Math.floor(t / turn);
           let v = 0;
           if (ph < 0.02) v += Math.sin(2 * Math.PI * 1900 * ph) * Math.exp(-ph / 0.0025) * 0.22 + Math.sin(2 * Math.PI * 140 * ph) * Math.exp(-ph / 0.008) * 0.12;      // the click
           const pp = ph - turn * 0.43; if (pp >= 0 && pp < 0.012) v += Math.sin(2 * Math.PI * 3400 * pp + k) * Math.exp(-pp / 0.0012) * 0.1;      // the pop
-          const hush = (nz() - 0.5) * 0.006 * Math.min(1, t / 0.5);
-          L[i] += v + hush; R[i] += v * 0.92 + hush;
+          L[i] += v; R[i] += v * 0.92;
         }
       }
       return { l: L.slice(skip, skip + want), r: R.slice(skip, skip + want) };
@@ -2565,6 +2564,8 @@ C.clap === 'recorded' ? ['perc-claps'] : [], C.hand === 'conga' ? ['perc-conga']
       later(work);
     }
   }
+  /* the arm clear of the record: it turns on, the side waits where it was */
+  function park(on) { post({ type: 'park', on: !!on }); }
   /* the arm in the air: no sound, though the record turns on underneath */
   function lift(up) {
     if (!ctx || lifted === up) return;
@@ -2602,7 +2603,7 @@ C.clap === 'recorded' ? ['perc-claps'] : [], C.hand === 'conga' ? ['perc-conga']
   }
 
   return {
-    start, stop, hold, scratch, release, seek, lift, volume, speed, click,
+    start, stop, hold, scratch, release, seek, park, lift, volume, speed, click,
     /* the first record, for the loader; then one of the other speed */
     prepare() {
       armed = true;

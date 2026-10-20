@@ -13,6 +13,7 @@ const Analog = (() => {
   let ctx = null;
   let master = null;      // analog layer only
   let bedGain = null;     // surface-noise level
+  let lifted = false;     // the needle clear of the record: no surface under it
   let bedTone = null;     // surface-noise colour
   let analyser = null;
   let noiseBuffer = null;
@@ -24,8 +25,10 @@ const Analog = (() => {
 
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
-  /* ---- surface noise: crackle + hiss from a looping buffer ---- */
-  function makeSurfaceBuffer() {
+  /* ---- surface noise: hiss and pops in a looping buffer (the drops' and
+     scratches' bursts are made from it); the bed under the record is the
+     pops alone, with no hiss between them ---- */
+  function makeSurfaceBuffer(popsOnly) {
     const len = ctx.sampleRate * 4;
     const buf = ctx.createBuffer(2, len, ctx.sampleRate);
     for (let ch = 0; ch < 2; ch++) {
@@ -34,7 +37,7 @@ const Analog = (() => {
       for (let i = 0; i < len; i++) {
         const white = Math.random() * 2 - 1;
         last = (last + 0.028 * white) / 1.028;   // brown-ish hiss
-        d[i] = last * 2.4;
+        d[i] = popsOnly ? 0 : last * 2.4;
         if (Math.random() < 0.00016) {           // sparse pops
           const amp = 0.28 + Math.random() * 0.45;
           for (let k = 0; k < 90 && i + k < len; k++) {
@@ -97,7 +100,7 @@ const Analog = (() => {
     bedGain.connect(bedTone).connect(master);
 
     const noiseSrc = ctx.createBufferSource();
-    noiseSrc.buffer = noiseBuffer;
+    noiseSrc.buffer = makeSurfaceBuffer(true);
     noiseSrc.loop = true;
     noiseSrc.connect(bedGain);
     noiseSrc.start();
@@ -110,7 +113,7 @@ const Analog = (() => {
     const t = ctx.currentTime;
     if (bedTone) bedTone.frequency.setTargetAtTime(2600 - groove * 1100, t, 0.25);
     if (bedGain && running) {
-      bedGain.gain.setTargetAtTime(noiseEnabled ? 0.035 + groove * 0.03 : 0, t, 0.3);
+      bedGain.gain.setTargetAtTime(noiseEnabled && !lifted ? 0.035 + groove * 0.03 : 0, t, lifted ? 0.03 : 0.3);
     }
   }
 
@@ -148,6 +151,8 @@ const Analog = (() => {
       burst({ dur: 0.05, gain: 0.28, freq: 2400, q: 0.8 });
     },
     needleLift() { burst({ dur: 0.07, gain: 0.26, freq: 1500, q: 1.4, sweep: 900 }); },
+    /* the arm held up while the platter turns: the surface noise goes with the needle */
+    lift(up) { lifted = !!up; applyGroove(); },
     scratch(intensity) {
       if (!running) return;
       const i = clamp(intensity, 0, 1);

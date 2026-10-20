@@ -16,7 +16,9 @@
    record crossfades over a few milliseconds.
 
    In: {type:'track', id, total, step, at}, {type:'next', id, total, step},
-   {type:'append', id, offset, l, r}, {type:'seek', at}, {type:'clear'}.
+   {type:'append', id, offset, l, r}, {type:'seek', at}, {type:'park', on},
+   {type:'clear'}. Parked (the arm lifted clear of the record), the platter
+   turns on but the needle reads nothing: the side waits where it was.
    Out: {type:'pos', at} a few times a second, {type:'track'} on moving to
    the next record.
    ============================================================ */
@@ -33,7 +35,7 @@ class Vinyl extends AudioWorkletProcessor {
   constructor() {
     super();
     this.cur = null; this.next = null; this.pos = 0; this.frames = 0;
-    this.old = null; this.oldPos = 0; this.fade = 0;
+    this.old = null; this.oldPos = 0; this.fade = 0; this.parked = false;
     this.port.onmessage = (ev) => {
       const m = ev.data;
       if (m.type === 'track') {
@@ -53,7 +55,10 @@ class Vinyl extends AudioWorkletProcessor {
         if (!this.cur) return;
         /* anywhere: if it is not pressed yet the needle waits on it */
         this.pos = Math.max(0, Math.min(1, m.at)) * this.cur.total;
+      } else if (m.type === 'park') {
+        this.parked = !!m.on;
       } else if (m.type === 'clear') {
+        this.parked = false;
         this.cur = null; this.next = null; this.old = null;
       }
     };
@@ -110,7 +115,7 @@ class Vinyl extends AudioWorkletProcessor {
     const rate = params.rate;
     for (let i = 0; i < L.length; i++) {
       const d = this.cur;
-      if (!d) { L[i] = 0; R[i] = 0; continue; }
+      if (!d || this.parked) { L[i] = 0; R[i] = 0; continue; }
       const r = rate.length > 1 ? rate[i] : rate[0];
       const speed = Math.abs(r);
       const level = speed >= 1 ? 1 : Math.pow(speed, 0.6);

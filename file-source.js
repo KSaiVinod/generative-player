@@ -121,6 +121,8 @@
     function scratch(r) { if (playing && holding) rateTo(r, 0.012); }
     function release() { if (holding) { holding = false; if (playing) rateTo(base(), 0.09); } }
     function seek(at) { pos = Math.max(0, Math.min(1, at)); if (node) node.port.postMessage({ type: 'seek', at: pos }); }
+    /* the arm clear of the record: it turns on, the side waits where it was */
+    function park(on) { if (node) node.port.postMessage({ type: 'park', on: !!on }); }
     function lift(up) {
       if (!ctx || lifted === up) return;
       lifted = up;
@@ -147,7 +149,7 @@
     }
 
     return {
-      start, stop, hold, scratch, release, seek, lift, volume, speed, click,
+      start, stop, hold, scratch, release, seek, park, lift, volume, speed, click,
       /* the file decoded ahead (before the first tap is fine: it waits for one to play) */
       prepare() { setup(); return decode(); },
       position: () => pos,
