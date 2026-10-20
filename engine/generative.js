@@ -53,6 +53,18 @@ window.VinylPlayer.Generative = (() => {
      is pressed less far ahead, one record's sounds are kept, and its long noise beds and risers at a part of the rate.
      The music is the same; a desktop presses as it always has. */
   const LEAN = (() => { try { return matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) <= 1100; } catch (e) { return false; } })();
+  /* the pressing plant: records pressed ahead, each night, by this same engine (scripts/press-plant.js), kept as
+     short overlapping AAC chunks with a manifest (the script tag's data-plant). A phone plays those - fetching a
+     record's chunks where it would have rendered its bars - so it neither renders nor holds a record's sounds;
+     a desktop presses its own (or with ?plant=1, the plant's). Without the manifest, or if the plant fails, the
+     engine presses as it always has. */
+  const PLANT_URL = (() => { const u = ME && ME.dataset.plant; try { return u ? new URL(u, location.href).href : null; } catch (e) { return null; } })();
+  const PLANT_ON = !!PLANT_URL && (LEAN || /[?&]plant=1\b/.test(location.search));
+  let plant = null, plantFails = 0;
+  const plantReady = !PLANT_ON ? Promise.resolve() : fetch(PLANT_URL, { cache: 'no-cache' })
+    .then((r) => (r.ok ? r.json() : null))
+    .then((m) => { if (m && Array.isArray(m.records) && m.records.length) plant = Object.assign(m, { base: new URL(m.base || '.', PLANT_URL).href }); })
+    .catch(() => { /* the engine presses its own */ });
   const SR = 32000;                               // plenty for this, and a third lighter than 48k
 
   /* ---- the styles -------------------------------------------------------- */
@@ -2073,8 +2085,56 @@ C.clap === 'recorded' ? ['perc-claps'] : [], C.hand === 'conga' ? ['perc-conga']
 
   /* (the engine renders progressive house only: the earlier styles' Tone.js renderer is gone) */
   function renderSegment(tr, a, b) {
+    if (tr.plant) return plantSegment(tr, a, b);
     if (tr.engine === 'prog') return renderProg(tr, a, b);
     return Promise.reject(new Error('only progressive records are pressed'));
+  }
+
+  /* ---- the pressing plant's records ---------------------------------------
+     A record from the pool is composed from its seed as ever (so the page knows its plan, its tempo, its run-out),
+     its length and tempo taken from the manifest, and its bars fetched rather than rendered: chunk k is bars
+     [k*C, (k+1)*C) with `overlap` samples either side, and is placed by the browser's own decoder delay, measured
+     once from a click at a known sample (cal.m4a). */
+  function fromPlant(rec) {
+    const tr = compose(rec.seed >>> 0, rec.side === 'b' ? 'b' : 'a', rec.rpm === 45 ? 45 : 33);
+    Object.assign(tr, { bpm: rec.bpm, bars: rec.bars, runout: rec.runout, sr: plant.sr, plant: Object.assign({ chunkBars: plant.chunkBars, overlap: plant.overlap }, rec) });
+    return tr;
+  }
+  function plantPick(rpm) {
+    if (!plant) return null;
+    const want = rpm === 45 ? 45 : 33, all = plant.records.filter((x) => (x.rpm === 45 ? 45 : 33) === want);
+    const fresh = all.filter((x) => !recent.some((t) => t.plant && t.plant.id === x.id));
+    const pool = fresh.length ? fresh : all;
+    return pool.length ? fromPlant(pool[Math.floor(Math.random() * pool.length)]) : null;
+  }
+  let plantDelay = null, plantDecoder = null;
+  const plantDecode = (url) => fetch(url).then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status + ' ' + url); return r.arrayBuffer(); })
+    .then((ab) => (plantDecoder || (plantDecoder = new OfflineAudioContext(2, 1, plant.sr))).decodeAudioData(ab));
+  function plantCalibrate() {
+    if (!plantDelay) {
+      plantDelay = plantDecode(plant.base + 'cal.m4a').then((b) => {
+        const c = b.getChannelData(0); let pk = 0, at0 = 0;
+        for (let i = 0; i < c.length; i++) if (Math.abs(c[i]) > pk) { pk = Math.abs(c[i]); at0 = i; }
+        return at0 - (plant.calAt || 4410);
+      });
+      plantDelay.catch(() => { plantDelay = null; });
+    }
+    return plantDelay;
+  }
+  function plantSegment(tr, a, b) {
+    const P = tr.plant, k = Math.floor(a / P.chunkBars);
+    return Promise.all([plantCalibrate(), plantDecode(plant.base + P.id + '/' + k + '.m4a')]).then(([D, buf]) => {
+      const from = at(tr, a), nominal = Math.max(0, from - P.overlap), start = from - nominal + D;
+      const n = at(tr, b) - from + (b < tr.bars ? FADE : 0), l = new Float32Array(n), r = new Float32Array(n);
+      const L = buf.getChannelData(0), R = buf.numberOfChannels > 1 ? buf.getChannelData(1) : L;
+      for (let i = 0; i < n; i++) { const j = start + i; if (j >= 0 && j < L.length) { l[i] = L[j]; r[i] = R[j]; } }
+      plantFails = 0;
+      return { l, r };
+    }, (e) => {
+      /* a plant that keeps failing is let go: the engine presses its own from then on */
+      if (++plantFails >= 3) { plant = null; report('the plant failed, pressing here', P.id, e && e.message); }
+      throw e;
+    });
   }
 
   /* ---- the deck ---------------------------------------------------------- */
@@ -2171,6 +2231,7 @@ C.clap === 'recorded' ? ['perc-claps'] : [], C.hand === 'conga' ? ['perc-conga']
     for (let x = this.want; x < bars && at < 0; x++) if (!this.has(x)) at = x;
     for (let x = 0; x < this.want && at < 0; x++) if (!this.has(x)) at = x;
     if (at < 0) return null;
+    if (this.tr.plant) { const C = this.tr.plant.chunkBars; at = Math.floor(at / C) * C; this.lastEnd = Math.min(bars, at + C); return [at, this.lastEnd]; }      // (a plant record comes in its chunks)
     if (at !== this.lastEnd) this.run = 0;
     /* from the start: 2, 4, then 8 bars; from a dropped needle: a single bar first, to sound at once */
     const len = (at === 0 ? [2, 4] : [1, 2, 4])[this.run] || 8;
@@ -2347,6 +2408,8 @@ C.clap === 'recorded' ? ['perc-claps'] : [], C.hand === 'conga' ? ['perc-conga']
     return s;
   }
   function pickTrack(rpm) {
+    const fromPool = plantPick(rpm);
+    if (fromPool) { recent.unshift(fromPool); if (recent.length > 4) recent.length = 4; return fromPool; }
     let best = null;
     for (let i = 0; i < 6; i++) {
       const tr = compose(newSeed(), 'a', rpm), sc = scoreTrack(tr);
@@ -2443,7 +2506,7 @@ C.clap === 'recorded' ? ['perc-claps'] : [], C.hand === 'conga' ? ['perc-conga']
      prepareB when it is offered), so the flip has sound at once */
   let bPress = null;
   function pressB() {
-    if (!bPress || bPress.dead) bPress = new Pressing(compose(B_SEED, 'b'), 'b');
+    if (!bPress || bPress.dead) bPress = new Pressing(plant && plant.b ? fromPlant(plant.b) : compose(B_SEED, 'b'), 'b');
     return bPress;
   }
 
@@ -2451,7 +2514,10 @@ C.clap === 'recorded' ? ['perc-claps'] : [], C.hand === 'conga' ? ['perc-conga']
      hand, and the B-side goes on from its first groove */
   async function flip() { return putOn(() => { const p = pressB(); bPress = null; return p; }); }      // (this copy goes on the deck; another is pressed if wanted again)
   /* a record by its seed, again (the page's crate of liked records), and the next record now (a shake) */
-  function replay(seed, side) { return putOn(() => new Pressing(compose(seed >>> 0, side === 'b' ? 'b' : 'a', belt), 'shelf')); }
+  function replay(seed, side) {
+    const rec = plant && (side === 'b' ? plant.b : plant.records.find((x) => x.seed === seed >>> 0 && x.side !== 'b'));
+    return putOn(() => new Pressing(rec ? fromPlant(rec) : compose(seed >>> 0, side === 'b' ? 'b' : 'a', belt), 'shelf'));
+  }
   function skip() { return putOn(() => take(belt)); }
   async function putOn(pressing) {
     setup();
@@ -2540,7 +2606,7 @@ C.clap === 'recorded' ? ['perc-claps'] : [], C.hand === 'conga' ? ['perc-conga']
     /* the first record, for the loader; then one of the other speed */
     prepare() {
       armed = true;
-      return press(belt).started();
+      return plantReady.then(() => press(belt).started());
     },
     like,
     /* the styles to pick from, and the pick: every A-side record from now on
@@ -2553,8 +2619,10 @@ C.clap === 'recorded' ? ['perc-claps'] : [], C.hand === 'conga' ? ['perc-conga']
     /* on the poster: from the moment the page opens, the first half of a
        record in this style pressed ahead, so START has nothing to wait for
        and the needle can be dropped anywhere in it (a new pick throws it away) */
-    warm(name) { setStyle(name); press(belt); },
+    warm(name) { setStyle(name); plantReady.then(() => press(belt)); },
     flip, replay, skip,
+    /* for the pressing plant's own run (scripts/press-plant.js): a record composed, and its bars rendered, as here */
+    plantKit: { compose, renderSegment, B_SEED, at: (tr, bar) => at(tr, bar), FADE, get plant() { return plant; } },
     prepareB: () => { pressB(); },
     /* what failed to load (development): [{ kind, name, detail, at }] */
     diagnostics: () => diag.slice(),
