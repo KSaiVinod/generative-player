@@ -2,7 +2,7 @@
 
 A turntable you can drop into any page, as a `<vinyl-player>` element, with a generative engine that writes and records a new progressive house track every time the needle drops.
 
-Install it from this repository (it is private: the installing machine needs read access):
+Install it from this repository:
 
 ```sh
 npm install github:KSaiVinod/generative-player#v1.0.0
