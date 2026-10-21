@@ -1,6 +1,14 @@
-# vinyl-player
+# generative-player
 
-A turntable you can drop into any page, as a `<vinyl-player>` element.
+A turntable you can drop into any page, as a `<vinyl-player>` element, with a generative engine that writes and records a new progressive house track every time the needle drops.
+
+Install it from this repository (it is private: the installing machine needs read access):
+
+```sh
+npm install github:KSaiVinod/generative-player#v1.0.0
+```
+
+Then serve the package folder (`node_modules/generative-player`) at a path of your choice, `/vinyl-player/` in the examples below.
 
 - **The record is the play button.** Tap it to start or stop.
 - **The arm is the seek control.** Drag it onto the record and the music plays from where the needle lands. Carry it off the record and the record turns on while the side waits where the needle left it; put the needle back down and it plays on from wherever it lands.
