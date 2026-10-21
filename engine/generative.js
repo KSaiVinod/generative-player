@@ -2609,6 +2609,8 @@ C.clap === 'recorded' ? ['perc-claps'] : [], C.hand === 'conga' ? ['perc-conga']
       armed = true;
       return plantReady.then(() => press(belt).started());
     },
+    /* (once prepare() has settled) true when the records come from the pressing plant, not this browser */
+    get fromPlant() { return !!plant; },
     like,
     /* the styles to pick from, and the pick: every A-side record from now on
        is of it ('' or an unknown name: the rotation) */
