@@ -27,5 +27,12 @@
   "repository": {
     "type": "git",
     "url": "git+ssh://git@github.com/KSaiVinod/generative-player.git"
+  },
+  "scripts": {
+    "pack-samples": "node scripts/pack-vcsl.js"
+  },
+  "devDependencies": {
+    "mpg123-decoder": "^1.0.3",
+    "lamejs": "^1.2.1"
   }
 }

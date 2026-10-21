@@ -1,3 +1,5 @@
 node_modules/
 .DS_Store
 *.log
+# the VCSL sources (scripts/pack-vcsl.js packs what is used into engine/vendor/vcsl)
+samples-src/
